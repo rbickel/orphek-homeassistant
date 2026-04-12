@@ -75,8 +75,12 @@ class OrphekDevice:
         """Test if the device is reachable and responds."""
         try:
             status = self._get_device().status()
-            return status is not None and "dps" in (status or {})
-        except Exception:
+            ok = status is not None and "dps" in (status or {})
+            if not ok:
+                _LOGGER.error("Device %s returned unexpected status: %s", self._host, status)
+            return ok
+        except Exception as err:
+            _LOGGER.error("Connection test failed for %s: %s", self._host, err)
             return False
 
     def get_state(self) -> OrphekState:

@@ -5,6 +5,10 @@ DOMAIN = "orphek"
 CONF_DEVICE_ID = "device_id"
 CONF_HOST = "host"
 CONF_LOCAL_KEY = "local_key"
+CONF_API_KEY = "api_key"
+CONF_API_SECRET = "api_secret"
+CONF_API_REGION = "api_region"
+CONF_CLOUD_CREDENTIALS = "cloud_credentials"
 
 TUYA_VERSION = 3.4
 
