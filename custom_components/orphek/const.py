@@ -2,19 +2,15 @@
 
 DOMAIN = "orphek"
 
+CONF_DEVICE_ID = "device_id"
 CONF_HOST = "host"
-CONF_PORT = "port"
+CONF_LOCAL_KEY = "local_key"
 
-DEFAULT_PORT = 8080
+TUYA_VERSION = 3.4
 
-# Known channel names for Orphek iCon lights
-CHANNEL_NAMES = [
-    "UV",
-    "Royal Blue",
-    "Blue",
-    "Cyan",
-    "Green",
-    "Red",
-    "Warm White",
-    "Cool White",
-]
+# Tuya DP mappings for Orphek OR4-iCon LED Bar
+DP_SWITCH = 20  # bool: on/off
+DP_BRIGHTNESS = 22  # int: 10-1000
+
+BRIGHTNESS_MIN = 10
+BRIGHTNESS_MAX = 1000

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import logging
+import math
 from typing import Any
 
 from homeassistant.components.light import (
@@ -10,16 +10,14 @@ from homeassistant.components.light import (
     ColorMode,
     LightEntity,
 )
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import OrphekConfigEntry
-from .const import DOMAIN
+from .const import BRIGHTNESS_MAX, BRIGHTNESS_MIN, DOMAIN
 from .coordinator import OrphekCoordinator
-
-_LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(
@@ -29,21 +27,14 @@ async def async_setup_entry(
 ) -> None:
     """Set up Orphek light entities from a config entry."""
     coordinator = entry.runtime_data
-
-    entities: list[OrphekChannelLight] = []
-    if coordinator.data and coordinator.data.channels:
-        for channel in coordinator.data.channels:
-            entities.append(
-                OrphekChannelLight(coordinator, entry, channel.channel_id)
-            )
-
-    async_add_entities(entities)
+    async_add_entities([OrphekLight(coordinator, entry)])
 
 
-class OrphekChannelLight(CoordinatorEntity[OrphekCoordinator], LightEntity):
-    """Represents a single channel of an Orphek light."""
+class OrphekLight(CoordinatorEntity[OrphekCoordinator], LightEntity):
+    """Represents an Orphek OR4-iCon LED Bar."""
 
     _attr_has_entity_name = True
+    _attr_name = None
     _attr_color_mode = ColorMode.BRIGHTNESS
     _attr_supported_color_modes = {ColorMode.BRIGHTNESS}
 
@@ -51,55 +42,47 @@ class OrphekChannelLight(CoordinatorEntity[OrphekCoordinator], LightEntity):
         self,
         coordinator: OrphekCoordinator,
         entry: OrphekConfigEntry,
-        channel_id: int,
     ) -> None:
         super().__init__(coordinator)
-        self._channel_id = channel_id
-        self._attr_unique_id = f"{entry.entry_id}_channel_{channel_id}"
+        self._attr_unique_id = entry.unique_id
         self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, entry.entry_id)},
+            identifiers={(DOMAIN, entry.unique_id)},
             name=entry.title,
             manufacturer="Orphek",
+            model="OR4-iCon LED Bar",
         )
-        self._update_attrs()
 
     @property
-    def _channel(self):
-        """Get the current channel state from coordinator data."""
-        if self.coordinator.data:
-            for ch in self.coordinator.data.channels:
-                if ch.channel_id == self._channel_id:
-                    return ch
-        return None
+    def is_on(self) -> bool | None:
+        if self.coordinator.data is None:
+            return None
+        return self.coordinator.data.is_on
 
-    def _update_attrs(self) -> None:
-        """Update entity attributes from coordinator data."""
-        channel = self._channel
-        if channel:
-            self._attr_name = channel.name
-            # Map 0-1000 → 0-255
-            self._attr_brightness = round(channel.brightness * 255 / 1000)
-            self._attr_is_on = channel.brightness > 0
-
-    @callback
-    def _handle_coordinator_update(self) -> None:
-        self._update_attrs()
-        super()._handle_coordinator_update()
+    @property
+    def brightness(self) -> int | None:
+        if self.coordinator.data is None or not self.coordinator.data.is_on:
+            return None
+        tuya_val = self.coordinator.data.brightness
+        return max(1, math.ceil(tuya_val * 255 / BRIGHTNESS_MAX))
 
     async def async_turn_on(self, **kwargs: Any) -> None:
-        """Turn on the channel."""
         if ATTR_BRIGHTNESS in kwargs:
-            # Map 0-255 → 0-1000
-            brightness_1000 = round(kwargs[ATTR_BRIGHTNESS] * 1000 / 255)
+            ha_brightness = kwargs[ATTR_BRIGHTNESS]
+            tuya_brightness = max(
+                BRIGHTNESS_MIN,
+                round(ha_brightness * BRIGHTNESS_MAX / 255),
+            )
+            await self.hass.async_add_executor_job(
+                self.coordinator.device.set_brightness, tuya_brightness
+            )
         else:
-            brightness_1000 = 1000
-
-        await self.coordinator.api.set_channel_brightness(
-            self._channel_id, brightness_1000
-        )
+            await self.hass.async_add_executor_job(
+                self.coordinator.device.set_power, True
+            )
         await self.coordinator.async_request_refresh()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
-        """Turn off the channel."""
-        await self.coordinator.api.set_channel_brightness(self._channel_id, 0)
+        await self.hass.async_add_executor_job(
+            self.coordinator.device.set_power, False
+        )
         await self.coordinator.async_request_refresh()

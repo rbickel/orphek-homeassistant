@@ -1,42 +1,29 @@
-"""API client for Orphek iCon aquarium lights."""
+"""API client for Orphek OR4-iCon LED Bar using Tuya local protocol."""
 
 from __future__ import annotations
 
-import asyncio
 import logging
-from dataclasses import dataclass, field
-from typing import Any
+from dataclasses import dataclass
 
-import aiohttp
+import tinytuya
+
+from .const import (
+    BRIGHTNESS_MAX,
+    BRIGHTNESS_MIN,
+    DP_BRIGHTNESS,
+    DP_SWITCH,
+    TUYA_VERSION,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
 
 @dataclass
-class OrphekDeviceInfo:
-    """Represents basic Orphek device information."""
-
-    model: str = "Unknown"
-    firmware_version: str = "Unknown"
-    mac_address: str = ""
-    name: str = "Orphek Light"
-
-
-@dataclass
-class OrphekChannelState:
-    """State of a single light channel."""
-
-    channel_id: int = 0
-    name: str = ""
-    brightness: int = 0  # 0-1000 (0.0% - 100.0%)
-
-
-@dataclass
 class OrphekState:
-    """Combined state of an Orphek light."""
+    """Current state of an Orphek light."""
 
     is_on: bool = False
-    channels: list[OrphekChannelState] = field(default_factory=list)
+    brightness: int = 0  # 0-1000
 
 
 class OrphekApiError(Exception):
@@ -47,78 +34,89 @@ class OrphekConnectionError(OrphekApiError):
     """Error connecting to the Orphek device."""
 
 
-class OrphekLight:
-    """API client for a single Orphek iCon light."""
+class OrphekDevice:
+    """Controls an Orphek OR4-iCon LED Bar via Tuya local protocol."""
 
-    def __init__(self, host: str, port: int = 8080) -> None:
+    def __init__(self, device_id: str, host: str, local_key: str) -> None:
+        self._device_id = device_id
         self._host = host
-        self._port = port
-        self._session: aiohttp.ClientSession | None = None
-        self._device_info: OrphekDeviceInfo | None = None
+        self._local_key = local_key
+        self._device: tinytuya.Device | None = None
+
+    @property
+    def device_id(self) -> str:
+        return self._device_id
 
     @property
     def host(self) -> str:
         return self._host
 
-    @property
-    def base_url(self) -> str:
-        return f"http://{self._host}:{self._port}"
+    def _get_device(self) -> tinytuya.Device:
+        if self._device is None:
+            self._device = tinytuya.Device(
+                self._device_id, self._host, self._local_key, version=TUYA_VERSION
+            )
+            self._device.set_socketPersistent(True)
+            self._device.set_socketRetryLimit(3)
+            self._device.set_socketTimeout(5)
+        return self._device
 
-    async def _ensure_session(self) -> aiohttp.ClientSession:
-        if self._session is None or self._session.closed:
-            self._session = aiohttp.ClientSession()
-        return self._session
+    def close(self) -> None:
+        """Close the connection."""
+        if self._device is not None:
+            try:
+                self._device.set_socketPersistent(False)
+                self._device.close()
+            except Exception:
+                pass
+            self._device = None
 
-    async def close(self) -> None:
-        if self._session and not self._session.closed:
-            await self._session.close()
-
-    async def test_connection(self) -> bool:
-        """Test if the device is reachable."""
+    def test_connection(self) -> bool:
+        """Test if the device is reachable and responds."""
         try:
-            await self.get_device_info()
-            return True
-        except OrphekApiError:
+            status = self._get_device().status()
+            return status is not None and "dps" in (status or {})
+        except Exception:
             return False
 
-    async def get_device_info(self) -> OrphekDeviceInfo:
-        """Retrieve device information."""
-        # TODO: Implement actual API call once protocol is known
-        # Placeholder — replace with real HTTP/UDP call
-        raise NotImplementedError("API protocol not yet implemented")
-
-    async def get_state(self) -> OrphekState:
+    def get_state(self) -> OrphekState:
         """Get the current light state."""
-        # TODO: Implement actual API call
-        raise NotImplementedError("API protocol not yet implemented")
-
-    async def set_channel_brightness(self, channel_id: int, brightness: int) -> None:
-        """Set brightness for a specific channel (0-1000)."""
-        # TODO: Implement actual API call
-        raise NotImplementedError("API protocol not yet implemented")
-
-    async def set_power(self, on: bool) -> None:
-        """Turn the light on or off."""
-        # TODO: Implement actual API call
-        raise NotImplementedError("API protocol not yet implemented")
-
-    async def _request(
-        self, method: str, path: str, **kwargs: Any
-    ) -> dict[str, Any]:
-        """Make an API request to the device."""
-        session = await self._ensure_session()
-        url = f"{self.base_url}{path}"
-
         try:
-            async with asyncio.timeout(10):
-                async with session.request(method, url, **kwargs) as resp:
-                    resp.raise_for_status()
-                    return await resp.json()
-        except asyncio.TimeoutError as err:
+            result = self._get_device().status()
+        except Exception as err:
+            self._device = None
             raise OrphekConnectionError(
-                f"Timeout connecting to {self._host}"
+                f"Error communicating with {self._host}: {err}"
             ) from err
-        except aiohttp.ClientError as err:
+
+        if result is None or "dps" not in result:
+            self._device = None
+            raise OrphekConnectionError(f"No response from {self._host}")
+
+        dps = result["dps"]
+        return OrphekState(
+            is_on=bool(dps.get(str(DP_SWITCH), False)),
+            brightness=int(dps.get(str(DP_BRIGHTNESS), 0)),
+        )
+
+    def set_power(self, on: bool) -> None:
+        """Turn the light on or off."""
+        try:
+            self._get_device().set_value(DP_SWITCH, on)
+        except Exception as err:
+            self._device = None
             raise OrphekConnectionError(
-                f"Error connecting to {self._host}: {err}"
+                f"Error sending command to {self._host}: {err}"
+            ) from err
+
+    def set_brightness(self, brightness: int) -> None:
+        """Set brightness (10-1000). Also turns on the light."""
+        brightness = max(BRIGHTNESS_MIN, min(BRIGHTNESS_MAX, brightness))
+        try:
+            dev = self._get_device()
+            dev.set_multiple_values({DP_SWITCH: True, DP_BRIGHTNESS: brightness})
+        except Exception as err:
+            self._device = None
+            raise OrphekConnectionError(
+                f"Error sending command to {self._host}: {err}"
             ) from err

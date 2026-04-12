@@ -2,20 +2,21 @@
   "config": {
     "step": {
       "user": {
-        "title": "Connect to Orphek Light",
-        "description": "Enter the IP address of your Orphek iCon light.",
+        "title": "Add Orphek Light",
+        "description": "Enter the connection details for your Orphek OR4-iCon LED Bar.",
         "data": {
-          "host": "Host",
-          "port": "Port"
+          "host": "IP Address",
+          "device_id": "Device ID",
+          "local_key": "Local Key"
         }
       }
     },
-    "error": {
-      "cannot_connect": "Failed to connect to the Orphek device.",
-      "unknown": "An unexpected error occurred."
-    },
     "abort": {
       "already_configured": "This device is already configured."
+    },
+    "error": {
+      "cannot_connect": "Cannot connect to the device. Check IP, Device ID, and Local Key.",
+      "unknown": "Unexpected error occurred."
     }
   }
 }

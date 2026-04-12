@@ -10,29 +10,33 @@ import voluptuous as vol
 from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
 from homeassistant.core import HomeAssistant
 
-from .api import OrphekLight, OrphekConnectionError
-from .const import CONF_HOST, CONF_PORT, DEFAULT_PORT, DOMAIN
+from .api import OrphekDevice, OrphekConnectionError
+from .const import CONF_DEVICE_ID, CONF_HOST, CONF_LOCAL_KEY, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
 STEP_USER_DATA_SCHEMA = vol.Schema(
     {
         vol.Required(CONF_HOST): str,
-        vol.Optional(CONF_PORT, default=DEFAULT_PORT): int,
+        vol.Required(CONF_DEVICE_ID): str,
+        vol.Required(CONF_LOCAL_KEY): str,
     }
 )
 
 
 async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str, str]:
     """Validate the user input allows us to connect."""
-    api = OrphekLight(data[CONF_HOST], data.get(CONF_PORT, DEFAULT_PORT))
-
+    device = OrphekDevice(
+        device_id=data[CONF_DEVICE_ID],
+        host=data[CONF_HOST],
+        local_key=data[CONF_LOCAL_KEY],
+    )
     try:
-        if not await api.test_connection():
+        connected = await hass.async_add_executor_job(device.test_connection)
+        if not connected:
             raise OrphekConnectionError("Cannot connect to device")
     finally:
-        await api.close()
-
+        device.close()
     return {"title": f"Orphek ({data[CONF_HOST]})"}
 
 
@@ -48,7 +52,8 @@ class OrphekConfigFlow(ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            self._async_abort_entries_match({CONF_HOST: user_input[CONF_HOST]})
+            await self.async_set_unique_id(user_input[CONF_DEVICE_ID])
+            self._abort_if_unique_id_configured()
 
             try:
                 info = await validate_input(self.hass, user_input)

@@ -15,3 +15,7 @@ venv/
 *.swp
 *.swo
 native_app/
+credentials.txt
+ha-venv/
+ha-config/
+snapshot.json
