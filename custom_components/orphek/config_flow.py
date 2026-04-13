@@ -151,7 +151,7 @@ class OrphekConfigFlow(ConfigFlow, domain=DOMAIN):
                         },
                     )
 
-                # Multiple devices — show picker
+                # Multiple devices available — show picker for a single device
                 device_options = {
                     dev["device_id"]: f"{dev['ip']} ({dev['device_id'][:8]}...)"
                     for dev in self._discovered_devices
@@ -160,10 +160,7 @@ class OrphekConfigFlow(ConfigFlow, domain=DOMAIN):
                     step_id="pick_device",
                     data_schema=vol.Schema(
                         {
-                            vol.Required("devices"): vol.All(
-                                [vol.In(device_options)],
-                                vol.Length(min=1),
-                            ),
+                            vol.Required("devices"): vol.In(device_options),
                         }
                     ),
                 )
