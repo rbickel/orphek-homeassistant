@@ -152,6 +152,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: OrphekConfigEntry) -> b
         coordinator: OrphekCoordinator = entry.runtime_data
         coordinator.device.close()
         # Close ATOP API session if it exists
-        if coordinator.atop:
-            await hass.async_add_executor_job(coordinator.atop.close)
+        if coordinator._atop:
+            await hass.async_add_executor_job(coordinator._atop.close)
     return unload_ok
