@@ -8,11 +8,13 @@
 docker run -d \
   --name homeassistant \
   --restart=unless-stopped \
-  -v /home/raphael/ha-config:/config \
-  -v /home/raphael/Coded/orphek-homeassistant/custom_components:/config/custom_components \
+  -v $HOME/ha-config:/config \
+  -v <path-to-repo>/custom_components:/config/custom_components \
   --network=host \
   ghcr.io/home-assistant/home-assistant:stable
 ```
+
+Replace `<path-to-repo>` with your local checkout of this repository. In this example, `$HOME/ha-config` is your Home Assistant configuration directory, and the repository is expected to contain `custom_components/orphek`.
 
 This mounts your working code directly into HA's config, so edits are reflected on restart.
 
@@ -24,7 +26,7 @@ source ha-venv/bin/activate
 pip install homeassistant tinytuya pycryptodome
 
 mkdir -p ha-config/custom_components
-ln -s /home/raphael/Coded/orphek-homeassistant/custom_components/orphek \
+ln -s <path-to-repo>/custom_components/orphek \
       ha-config/custom_components/orphek
 
 hass -c ha-config
