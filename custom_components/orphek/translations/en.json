@@ -8,25 +8,25 @@
           "method": "Setup method"
         }
       },
-      "cloud": {
-        "title": "Tuya Cloud Credentials",
-        "description": "Enter your Tuya IoT Platform API credentials. To get these:\n1. Create a free account at [iot.tuya.com](https://iot.tuya.com)\n2. Create a Cloud Project (Smart Home)\n3. Link your SmartLife app account under **Devices → Link Tuya App Account**\n4. Copy the **Access ID** and **Access Secret** from the project overview",
+      "orphek_login": {
+        "title": "Orphek Account Login",
+        "description": "Enter your Orphek app credentials to automatically discover and set up your lights.",
         "data": {
-          "api_key": "Access ID (API Key)",
-          "api_secret": "Access Secret",
-          "api_region": "Data Center Region"
+          "email": "Email",
+          "password": "Password",
+          "country_code": "Country code (phone prefix)"
         }
       },
       "discover": {
         "title": "Select Devices",
-        "description": "The following Orphek lights were found on your network. Select which ones to add.",
+        "description": "The following Orphek lights were found. Select which ones to add.",
         "data": {
           "devices": "Devices"
         }
       },
       "manual": {
         "title": "Manual Device Setup",
-        "description": "Enter the connection details for your Orphek light. You will need the Device ID and Local Key from the Tuya IoT Platform.",
+        "description": "Enter the connection details for your Orphek light.",
         "data": {
           "host": "IP Address",
           "device_id": "Device ID",
@@ -36,12 +36,12 @@
     },
     "abort": {
       "already_configured": "This device is already configured.",
-      "no_devices_found": "No Orphek lights found on your network. Make sure they are powered on and connected to the same network.",
-      "no_new_devices": "All discovered Orphek lights are already configured."
+      "no_devices_found": "No Orphek lights found. Make sure they are powered on and connected to the same network.",
+      "no_keys_found": "Orphek lights were found on your network but their local keys could not be retrieved. Please use manual setup, or pair the devices with the SmartLife app first and try again."
     },
     "error": {
       "cannot_connect": "Cannot connect to the device. Check IP, Device ID, and Local Key.",
-      "invalid_api_credentials": "Invalid API credentials. Check your Access ID and Access Secret.",
+      "invalid_auth": "Invalid email or password. Please check your Orphek app credentials.",
       "no_devices_selected": "Please select at least one device.",
       "unknown": "Unexpected error occurred."
     }

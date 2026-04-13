@@ -8,39 +8,46 @@ from typing import Any
 import voluptuous as vol
 
 from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
+from homeassistant.const import CONF_EMAIL, CONF_PASSWORD
 from homeassistant.core import HomeAssistant
 
-from .api import OrphekDevice, OrphekConnectionError
+from .api import OrphekDevice
+from .atop import OrphekAtopApi
 from .cloud import TuyaCloudApi
 from .const import (
-    CONF_API_KEY,
-    CONF_API_REGION,
-    CONF_API_SECRET,
-    CONF_CLOUD_CREDENTIALS,
+    CONF_ATOP_COUNTRY_CODE,
+    CONF_ATOP_EMAIL,
+    CONF_ATOP_PASSWORD,
     CONF_DEVICE_ID,
     CONF_HOST,
     CONF_LOCAL_KEY,
+    COUNTRIES,
     DOMAIN,
+    TUYA_API_KEY,
+    TUYA_API_REGION,
+    TUYA_API_SECRET,
 )
 from .discovery import discover_orphek_devices
 
 _LOGGER = logging.getLogger(__name__)
 
-STEP_METHOD_SCHEMA = vol.Schema(
+STEP_USER_SCHEMA = vol.Schema(
     {
-        vol.Required("method", default="cloud"): vol.In(
-            {"cloud": "Auto-discover (recommended)", "manual": "Manual setup"}
+        vol.Required("method", default="orphek"): vol.In(
+            {
+                "orphek": "Orphek account (email/password)",
+                "auto": "Auto-discover (requires Tuya IoT project)",
+                "manual": "Manual setup",
+            }
         ),
     }
 )
 
-STEP_CLOUD_SCHEMA = vol.Schema(
+STEP_ORPHEK_LOGIN_SCHEMA = vol.Schema(
     {
-        vol.Required(CONF_API_KEY): str,
-        vol.Required(CONF_API_SECRET): str,
-        vol.Required(CONF_API_REGION, default="eu"): vol.In(
-            {"eu": "Europe", "us": "Americas", "cn": "China", "in": "India"}
-        ),
+        vol.Required(CONF_EMAIL): str,
+        vol.Required(CONF_PASSWORD): str,
+        vol.Required("country_code", default="1"): vol.In(COUNTRIES),
     }
 )
 
@@ -69,49 +76,132 @@ class OrphekConfigFlow(ConfigFlow, domain=DOMAIN):
 
     def __init__(self) -> None:
         """Initialize the config flow."""
-        self._cloud_api: TuyaCloudApi | None = None
         self._discovered_devices: list[dict[str, Any]] = []
+        self._atop_email: str = ""
+        self._atop_password: str = ""
+        self._atop_country_code: str = ""
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Handle the initial step — choose setup method."""
+        """Handle the initial step."""
         if user_input is not None:
-            if user_input["method"] == "cloud":
-                return await self.async_step_cloud()
+            if user_input["method"] == "orphek":
+                return await self.async_step_orphek_login()
+            if user_input["method"] == "auto":
+                return await self.async_step_discover()
             return await self.async_step_manual()
 
-        return self.async_show_form(step_id="user", data_schema=STEP_METHOD_SCHEMA)
+        return self.async_show_form(step_id="user", data_schema=STEP_USER_SCHEMA)
 
-    async def async_step_cloud(
+    async def async_step_orphek_login(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Handle cloud credentials step."""
+        """Handle Orphek email/password login and auto-discover devices."""
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            api = TuyaCloudApi(
-                user_input[CONF_API_KEY],
-                user_input[CONF_API_SECRET],
-                user_input[CONF_API_REGION],
+            email = user_input[CONF_EMAIL]
+            password = user_input[CONF_PASSWORD]
+            country_code = user_input.get("country_code", "1")
+
+            atop = OrphekAtopApi()
+            logged_in = await self.hass.async_add_executor_job(
+                atop.login, email, password, country_code
             )
 
-            valid = await self.hass.async_add_executor_job(api.test_credentials)
-            if not valid:
-                errors["base"] = "invalid_api_credentials"
+            if not logged_in:
+                errors["base"] = "invalid_auth"
             else:
-                self._cloud_api = api
-                # Save cloud credentials for later use (key refresh etc.)
-                self.hass.data.setdefault(DOMAIN, {})[CONF_CLOUD_CREDENTIALS] = {
-                    CONF_API_KEY: user_input[CONF_API_KEY],
-                    CONF_API_SECRET: user_input[CONF_API_SECRET],
-                    CONF_API_REGION: user_input[CONF_API_REGION],
+                # Discover devices on LAN
+                lan_devices = await self.hass.async_add_executor_job(
+                    discover_orphek_devices
+                )
+
+                # Fetch all cloud devices to get local keys
+                cloud_devices = await self.hass.async_add_executor_job(
+                    atop.get_devices
+                )
+                cloud_map = {
+                    d.get("devId"): d for d in cloud_devices if d.get("devId")
                 }
-                return await self.async_step_discover()
+
+                existing = {
+                    entry.unique_id for entry in self._async_current_entries()
+                }
+                self._discovered_devices = []
+
+                for dev in lan_devices:
+                    if dev.device_id in existing:
+                        continue
+                    cloud_dev = cloud_map.get(dev.device_id)
+                    if cloud_dev and cloud_dev.get("localKey"):
+                        self._discovered_devices.append(
+                            {
+                                "device_id": dev.device_id,
+                                "ip": dev.ip,
+                                "local_key": cloud_dev["localKey"],
+                            }
+                        )
+
+                # Also add cloud-only devices (not on LAN yet)
+                lan_ids = {d.device_id for d in lan_devices}
+                for dev_id, cloud_dev in cloud_map.items():
+                    if dev_id not in existing and dev_id not in lan_ids:
+                        ip = cloud_dev.get("ip", "")
+                        if ip and cloud_dev.get("localKey"):
+                            self._discovered_devices.append(
+                                {
+                                    "device_id": dev_id,
+                                    "ip": ip,
+                                    "local_key": cloud_dev["localKey"],
+                                }
+                            )
+
+                if not self._discovered_devices:
+                    return self.async_abort(reason="no_devices_found")
+
+                # Save credentials for the device picker step
+                self._atop_email = email
+                self._atop_password = password
+                self._atop_country_code = country_code
+
+                if len(self._discovered_devices) == 1:
+                    dev = self._discovered_devices[0]
+                    await self.async_set_unique_id(dev["device_id"])
+                    self._abort_if_unique_id_configured()
+                    return self.async_create_entry(
+                        title=f"Orphek ({dev['ip']})",
+                        data={
+                            CONF_HOST: dev["ip"],
+                            CONF_DEVICE_ID: dev["device_id"],
+                            CONF_LOCAL_KEY: dev["local_key"],
+                            CONF_ATOP_EMAIL: email,
+                            CONF_ATOP_PASSWORD: password,
+                            CONF_ATOP_COUNTRY_CODE: country_code,
+                        },
+                    )
+
+                # Multiple devices — show picker
+                device_options = {
+                    dev["device_id"]: f"{dev['ip']} ({dev['device_id'][:8]}...)"
+                    for dev in self._discovered_devices
+                }
+                return self.async_show_form(
+                    step_id="discover",
+                    data_schema=vol.Schema(
+                        {
+                            vol.Required("devices"): vol.All(
+                                [vol.In(device_options)],
+                                vol.Length(min=1),
+                            ),
+                        }
+                    ),
+                )
 
         return self.async_show_form(
-            step_id="cloud",
-            data_schema=STEP_CLOUD_SCHEMA,
+            step_id="orphek_login",
+            data_schema=STEP_ORPHEK_LOGIN_SCHEMA,
             errors=errors,
         )
 
@@ -122,23 +212,26 @@ class OrphekConfigFlow(ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            # User selected devices to add
             selected = user_input.get("devices", [])
             if not selected:
                 errors["base"] = "no_devices_selected"
             else:
-                # Add the first device; remaining ones get added in the next iteration
                 for dev in self._discovered_devices:
                     if dev["device_id"] in selected:
                         await self.async_set_unique_id(dev["device_id"])
                         self._abort_if_unique_id_configured()
+                        data = {
+                            CONF_HOST: dev["ip"],
+                            CONF_DEVICE_ID: dev["device_id"],
+                            CONF_LOCAL_KEY: dev["local_key"],
+                        }
+                        if self._atop_email:
+                            data[CONF_ATOP_EMAIL] = self._atop_email
+                            data[CONF_ATOP_PASSWORD] = self._atop_password
+                            data[CONF_ATOP_COUNTRY_CODE] = self._atop_country_code
                         return self.async_create_entry(
                             title=f"Orphek ({dev['ip']})",
-                            data={
-                                CONF_HOST: dev["ip"],
-                                CONF_DEVICE_ID: dev["device_id"],
-                                CONF_LOCAL_KEY: dev["local_key"],
-                            },
+                            data=data,
                         )
 
         # Discover devices on LAN
@@ -149,18 +242,17 @@ class OrphekConfigFlow(ConfigFlow, domain=DOMAIN):
             return self.async_abort(reason="no_devices_found")
 
         # Fetch local keys from cloud for each discovered device
+        cloud = TuyaCloudApi(TUYA_API_KEY, TUYA_API_SECRET, TUYA_API_REGION)
+
+        existing = {entry.unique_id for entry in self._async_current_entries()}
         self._discovered_devices = []
+
         for dev in lan_devices:
-            # Skip already configured devices
-            existing = {
-                entry.unique_id
-                for entry in self._async_current_entries()
-            }
             if dev.device_id in existing:
                 continue
 
             local_key = await self.hass.async_add_executor_job(
-                self._cloud_api.get_device_local_key, dev.device_id
+                cloud.get_device_local_key, dev.device_id
             )
             if local_key:
                 self._discovered_devices.append(
@@ -170,11 +262,16 @@ class OrphekConfigFlow(ConfigFlow, domain=DOMAIN):
                         "local_key": local_key,
                     }
                 )
+            else:
+                _LOGGER.debug(
+                    "No cloud key for %s — device may need SmartLife pairing",
+                    dev.device_id,
+                )
 
         if not self._discovered_devices:
-            return self.async_abort(reason="no_new_devices")
+            return self.async_abort(reason="no_keys_found")
 
-        # If only one device, add it directly
+        # Single device — add directly
         if len(self._discovered_devices) == 1:
             dev = self._discovered_devices[0]
             await self.async_set_unique_id(dev["device_id"])

@@ -14,8 +14,23 @@ venv/
 .vscode/
 *.swp
 *.swo
+
+# Development / reverse engineering
 native_app/
 credentials.txt
 ha-venv/
 ha-config/
 snapshot.json
+patched_apk/
+orphek_apkx/
+bmp_extract/
+test_node/
+Orphek iCon_1.0.6_APKPure.xapk
+tuya_captures.log
+capture_tuya.py
+atop_auth.py
+emulate_getchkey.py
+frida_capture.js
+reverse_chkey.py
+scan_bmp.py
+test_*.py

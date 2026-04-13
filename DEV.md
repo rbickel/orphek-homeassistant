@@ -21,7 +21,7 @@ This mounts your working code directly into HA's config, so edits are reflected 
 ```bash
 python3 -m venv ha-venv
 source ha-venv/bin/activate
-pip install homeassistant tinytuya
+pip install homeassistant tinytuya pycryptodome
 
 mkdir -p ha-config/custom_components
 ln -s /home/raphael/Coded/orphek-homeassistant/custom_components/orphek \

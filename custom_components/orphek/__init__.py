@@ -9,12 +9,21 @@ from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 
 from .api import OrphekDevice
-from .const import CONF_DEVICE_ID, CONF_HOST, CONF_LOCAL_KEY, DOMAIN
+from .atop import OrphekAtopApi
+from .const import (
+    CONF_ATOP_COUNTRY_CODE,
+    CONF_ATOP_EMAIL,
+    CONF_ATOP_PASSWORD,
+    CONF_DEVICE_ID,
+    CONF_HOST,
+    CONF_LOCAL_KEY,
+    DOMAIN,
+)
 from .coordinator import OrphekCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS: list[Platform] = [Platform.LIGHT]
+PLATFORMS: list[Platform] = [Platform.BINARY_SENSOR, Platform.LIGHT, Platform.SENSOR]
 
 type OrphekConfigEntry = ConfigEntry[OrphekCoordinator]
 
@@ -26,7 +35,22 @@ async def async_setup_entry(hass: HomeAssistant, entry: OrphekConfigEntry) -> bo
         host=entry.data[CONF_HOST],
         local_key=entry.data[CONF_LOCAL_KEY],
     )
-    coordinator = OrphekCoordinator(hass, device)
+
+    # Set up ATOP cloud client for schedule/expansion data if credentials available
+    atop: OrphekAtopApi | None = None
+    atop_email = entry.data.get(CONF_ATOP_EMAIL)
+    atop_password = entry.data.get(CONF_ATOP_PASSWORD)
+    if atop_email and atop_password:
+        country_code = entry.data.get(CONF_ATOP_COUNTRY_CODE, "1")
+        atop = OrphekAtopApi()
+        logged_in = await hass.async_add_executor_job(
+            atop.login, atop_email, atop_password, country_code
+        )
+        if not logged_in:
+            _LOGGER.warning("ATOP cloud login failed; schedule data unavailable")
+            atop = None
+
+    coordinator = OrphekCoordinator(hass, device, atop=atop)
     await coordinator.async_config_entry_first_refresh()
     entry.runtime_data = coordinator
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
