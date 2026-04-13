@@ -177,8 +177,15 @@ class OrphekConfigFlow(ConfigFlow, domain=DOMAIN):
         """Handle device selection when multiple devices are found."""
         if user_input is not None:
             selected = user_input.get("devices", [])
+            selected_device_found = False
             for dev in self._discovered_devices:
                 if dev["device_id"] in selected:
+                    selected_device_found = True
+                    if not await _test_device(
+                        self.hass, dev["ip"], dev["device_id"], dev["local_key"]
+                    ):
+                        continue
+
                     await self.async_set_unique_id(dev["device_id"])
                     self._abort_if_unique_id_configured()
                     return self.async_create_entry(
@@ -192,5 +199,8 @@ class OrphekConfigFlow(ConfigFlow, domain=DOMAIN):
                             CONF_ATOP_COUNTRY_CODE: self._atop_country_code,
                         },
                     )
+
+            if selected_device_found:
+                return self.async_abort(reason="cannot_connect")
 
         return self.async_abort(reason="no_devices_selected")
