@@ -105,8 +105,10 @@ class OrphekConfigFlow(ConfigFlow, domain=DOMAIN):
                         entry.unique_id for entry in self._async_current_entries()
                     }
                     self._discovered_devices = []
+                    lan_device_count = 0
 
                     for dev in lan_devices:
+                        lan_device_count += 1
                         if dev.device_id in existing:
                             continue
                         cloud_dev = cloud_map.get(dev.device_id)
@@ -134,6 +136,9 @@ class OrphekConfigFlow(ConfigFlow, domain=DOMAIN):
                                 )
 
                     if not self._discovered_devices:
+                        # Distinguish between no devices found vs. no keys available
+                        if lan_device_count > 0:
+                            return self.async_abort(reason="no_keys_found")
                         return self.async_abort(reason="no_devices_found")
 
                     # Save session ID and credentials for the device picker step
@@ -163,7 +168,7 @@ class OrphekConfigFlow(ConfigFlow, domain=DOMAIN):
                         for dev in self._discovered_devices
                     }
                     return self.async_show_form(
-                        step_id="pick_device",
+                        step_id="discover",
                         data_schema=vol.Schema(
                             {
                                 vol.Required("devices"): vol.In(device_options),
@@ -177,36 +182,53 @@ class OrphekConfigFlow(ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
-    async def async_step_pick_device(
+    async def async_step_discover(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Handle device selection when multiple devices are found."""
+        errors: dict[str, str] = {}
+
         if user_input is not None:
-            selected = user_input.get("devices", [])
-            selected_device_found = False
-            for dev in self._discovered_devices:
-                if dev["device_id"] in selected:
-                    selected_device_found = True
-                    if not await _test_device(
-                        self.hass, dev["ip"], dev["device_id"], dev["local_key"]
-                    ):
-                        continue
+            selected_device_id = user_input.get("devices")
 
-                    await self.async_set_unique_id(dev["device_id"])
-                    self._abort_if_unique_id_configured()
-                    return self.async_create_entry(
-                        title=f"Orphek ({dev['ip']})",
-                        data={
-                            CONF_HOST: dev["ip"],
-                            CONF_DEVICE_ID: dev["device_id"],
-                            CONF_LOCAL_KEY: dev["local_key"],
-                            CONF_ATOP_EMAIL: self._atop_email,
-                            CONF_ATOP_SESSION_ID: self._atop_session_id,
-                            CONF_ATOP_COUNTRY_CODE: self._atop_country_code,
-                        },
-                    )
+            if not selected_device_id:
+                errors["base"] = "no_devices_selected"
+            else:
+                # Find the selected device
+                for dev in self._discovered_devices:
+                    if dev["device_id"] == selected_device_id:
+                        # Test connection to device
+                        if not await _test_device(
+                            self.hass, dev["ip"], dev["device_id"], dev["local_key"]
+                        ):
+                            errors["base"] = "cannot_connect"
+                            break
 
-            if selected_device_found:
-                return self.async_abort(reason="cannot_connect")
+                        await self.async_set_unique_id(dev["device_id"])
+                        self._abort_if_unique_id_configured()
+                        return self.async_create_entry(
+                            title=f"Orphek ({dev['ip']})",
+                            data={
+                                CONF_HOST: dev["ip"],
+                                CONF_DEVICE_ID: dev["device_id"],
+                                CONF_LOCAL_KEY: dev["local_key"],
+                                CONF_ATOP_EMAIL: self._atop_email,
+                                CONF_ATOP_SESSION_ID: self._atop_session_id,
+                                CONF_ATOP_COUNTRY_CODE: self._atop_country_code,
+                            },
+                        )
 
-        return self.async_abort(reason="no_devices_selected")
+        # Show form (either first time or on error)
+        device_options = {
+            dev["device_id"]: f"{dev['ip']} ({dev['device_id'][:8]}...)"
+            for dev in self._discovered_devices
+        }
+        return self.async_show_form(
+            step_id="discover",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("devices"): vol.In(device_options),
+                }
+            ),
+            errors=errors,
+        )

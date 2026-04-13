@@ -120,6 +120,11 @@ class OrphekAtopApi:
         """
         self._sid = session_id
 
+    def close(self) -> None:
+        """Close the HTTP session and cleanup resources."""
+        if self._session:
+            self._session.close()
+
     def _request(
         self,
         api: str,
@@ -178,8 +183,16 @@ class OrphekAtopApi:
         if "postData" in sign_params:
             form["postData"] = sign_params["postData"]
 
-        resp = self._session.post(self._endpoint, data=form, timeout=15)
-        raw = resp.json()
+        try:
+            resp = self._session.post(self._endpoint, data=form, timeout=15)
+            resp.raise_for_status()
+            raw = resp.json()
+        except requests.exceptions.RequestException as err:
+            _LOGGER.error("ATOP API request failed: %s", err)
+            return {"success": False, "errorMsg": str(err)}
+        except ValueError as err:
+            _LOGGER.error("Failed to parse ATOP API response as JSON: %s", err)
+            return {"success": False, "errorMsg": "Invalid JSON response"}
 
         if encrypt and "result" in raw and raw["result"]:
             try:

@@ -23,7 +23,6 @@ from .const import (
     CHANNEL_MIN,
     DP_CH1,
     DOMAIN,
-    MODES_SELECTABLE,
 )
 from .coordinator import OrphekCoordinator
 
