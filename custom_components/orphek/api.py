@@ -323,36 +323,45 @@ class OrphekDevice:
     @staticmethod
     def _parse_dps(dps: dict) -> OrphekState:
         """Parse a DPS dict into an OrphekState."""
-        channels = {dp: int(dps.get(str(dp), 0)) for dp in DP_CHANNELS}
+
+        def _get_dps_value(dp: int, default=None):
+            """Return a DPS value for either string or integer DP keys."""
+            if str(dp) in dps:
+                return dps[str(dp)]
+            if dp in dps:
+                return dps[dp]
+            return default
+
+        channels = {dp: int(_get_dps_value(dp, 0)) for dp in DP_CHANNELS}
 
         # Parse schedules
-        dp111 = dps.get(str(DP_PROGRAM_MODE), "")
-        dp112 = dps.get(str(DP_PROGRAM_PRESET), "")
+        dp111 = _get_dps_value(DP_PROGRAM_MODE, "")
+        dp112 = _get_dps_value(DP_PROGRAM_PRESET, "")
         schedule = _parse_schedule(dp111) if dp111 else []
         schedule_preset = _parse_schedule(dp112, has_header=True) if dp112 else []
 
         # Parse expansion enabled states
-        dp114 = dps.get(str(DP_JELLYFISH), "")
-        dp115 = dps.get(str(DP_CLOUDS), "")
-        dp116 = dps.get(str(DP_ACCLIMATION), "")
-        dp117 = dps.get(str(DP_LUNAR), "")
-        dp126 = dps.get(str(DP_BIORHYTHM), "")
-        dp127 = dps.get(str(DP_SUN_MOON_SYNC), "")
+        dp114 = _get_dps_value(DP_JELLYFISH, "")
+        dp115 = _get_dps_value(DP_CLOUDS, "")
+        dp116 = _get_dps_value(DP_ACCLIMATION, "")
+        dp117 = _get_dps_value(DP_LUNAR, "")
+        dp126 = _get_dps_value(DP_BIORHYTHM, "")
+        dp127 = _get_dps_value(DP_SUN_MOON_SYNC, "")
 
-        temp_c = dps.get(str(DP_TEMPERATURE_C))
-        temp_f = dps.get(str(DP_TEMP_F))
+        temp_c = _get_dps_value(DP_TEMPERATURE_C)
+        temp_f = _get_dps_value(DP_TEMP_F)
 
         return OrphekState(
-            is_on=bool(dps.get(str(DP_SWITCH), False)),
+            is_on=bool(_get_dps_value(DP_SWITCH, False)),
             channels=channels,
-            mode=str(dps.get(str(DP_MODE), "")),
-            mode_running=str(dps.get(str(DP_MODE_RUNNING), "")),
+            mode=str(_get_dps_value(DP_MODE, "")),
+            mode_running=str(_get_dps_value(DP_MODE_RUNNING, "")),
             temperature_c=int(temp_c) if temp_c is not None else None,
             temperature_f=int(temp_f) if temp_f is not None else None,
-            temp_unit=str(dps.get(str(DP_TEMP_UNIT), "c")),
-            fault=int(dps.get(str(DP_FAULT), 0)),
-            quiet_mode=bool(dps.get(str(DP_QUIET_MODE), False)),
-            no_auto_switch=bool(dps.get(str(DP_NO_AUTO_SWITCH), False)),
+            temp_unit=str(_get_dps_value(DP_TEMP_UNIT, "c")),
+            fault=int(_get_dps_value(DP_FAULT, 0)),
+            quiet_mode=bool(_get_dps_value(DP_QUIET_MODE, False)),
+            no_auto_switch=bool(_get_dps_value(DP_NO_AUTO_SWITCH, False)),
             schedule=schedule,
             schedule_preset=schedule_preset,
             jellyfish=_parse_jellyfish(dp114) if dp114 else JellyfishConfig(),
