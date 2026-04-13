@@ -110,7 +110,7 @@ class OrphekLight(CoordinatorEntity[OrphekCoordinator], LightEntity):
         if ATTR_EFFECT in kwargs:
             effect = kwargs[ATTR_EFFECT]
             mode = _EFFECT_TO_MODE.get(effect, effect)
-            await self.hass.async_add_executor_job(
+            await self.coordinator.async_device_io(
                 self.coordinator.device.set_mode, mode
             )
         elif ATTR_BRIGHTNESS in kwargs:
@@ -119,17 +119,17 @@ class OrphekLight(CoordinatorEntity[OrphekCoordinator], LightEntity):
                 CHANNEL_MIN,
                 round(ha_brightness * CHANNEL_MAX / 255),
             )
-            await self.hass.async_add_executor_job(
+            await self.coordinator.async_device_io(
                 self.coordinator.device.set_brightness, channel_brightness
             )
         else:
-            await self.hass.async_add_executor_job(
+            await self.coordinator.async_device_io(
                 self.coordinator.device.set_power, True
             )
         await self.coordinator.async_request_refresh()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
-        await self.hass.async_add_executor_job(
+        await self.coordinator.async_device_io(
             self.coordinator.device.set_power, False
         )
         await self.coordinator.async_request_refresh()

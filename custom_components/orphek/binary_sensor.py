@@ -30,7 +30,6 @@ async def async_setup_entry(
         OrphekBinarySensor(coordinator, entry, device_info, "lunar_enabled", "Lunar cycle", "mdi:moon-waning-crescent"),
         OrphekBinarySensor(coordinator, entry, device_info, "biorhythm_enabled", "Biorhythm", "mdi:sine-wave"),
         OrphekBinarySensor(coordinator, entry, device_info, "sun_moon_sync_enabled", "Sun moon sync", "mdi:weather-sunny"),
-        OrphekBinarySensor(coordinator, entry, device_info, "quiet_mode", "Quiet mode", "mdi:fan-off"),
     ])
 
 

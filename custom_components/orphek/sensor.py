@@ -41,7 +41,6 @@ async def async_setup_entry(
     async_add_entities([
         OrphekTemperatureCelsiusSensor(coordinator, entry, device_info),
         OrphekTemperatureFahrenheitSensor(coordinator, entry, device_info),
-        OrphekModeSensor(coordinator, entry, device_info),
         OrphekModeRunningSensor(coordinator, entry, device_info),
         OrphekScheduleSensor(coordinator, entry, device_info),
         OrphekSchedulePresetSensor(coordinator, entry, device_info),
@@ -102,30 +101,6 @@ class OrphekTemperatureFahrenheitSensor(CoordinatorEntity[OrphekCoordinator], Se
         return self.coordinator.data.temperature_f
 
 
-class OrphekModeSensor(CoordinatorEntity[OrphekCoordinator], SensorEntity):
-    """Selected mode sensor for the Orphek light."""
-
-    _attr_has_entity_name = True
-    _attr_name = "Mode"
-    _attr_icon = "mdi:lightbulb-cog"
-
-    def __init__(
-        self,
-        coordinator: OrphekCoordinator,
-        entry: OrphekConfigEntry,
-        device_info: DeviceInfo,
-    ) -> None:
-        super().__init__(coordinator)
-        self._attr_unique_id = f"{entry.unique_id}_mode"
-        self._attr_device_info = device_info
-
-    @property
-    def native_value(self) -> str | None:
-        if self.coordinator.data is None:
-            return None
-        return self.coordinator.data.mode
-
-
 class OrphekModeRunningSensor(CoordinatorEntity[OrphekCoordinator], SensorEntity):
     """Running mode sensor for the Orphek light."""
 
@@ -173,6 +148,22 @@ class OrphekScheduleSensor(CoordinatorEntity[OrphekCoordinator], SensorEntity):
             return None
         slots = self.coordinator.data.schedule
         return _format_schedule(slots) if slots else "No schedule"
+
+    @property
+    def extra_state_attributes(self) -> dict | None:
+        if self.coordinator.data is None:
+            return None
+        slots = self.coordinator.data.schedule
+        return {
+            "slots": [
+                {
+                    "hour": s.hour,
+                    "minute": s.minute,
+                    "channels": s.channels,
+                }
+                for s in slots
+            ]
+        }
 
 
 class OrphekSchedulePresetSensor(CoordinatorEntity[OrphekCoordinator], SensorEntity):

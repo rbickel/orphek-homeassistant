@@ -17,6 +17,7 @@ from .const import (
     DP_CH1,
     DP_CLOUDS,
     DP_FAULT,
+    DP_HOUR_SYSTEM,
     DP_JELLYFISH,
     DP_LUNAR,
     DP_MODE,
@@ -108,6 +109,7 @@ class OrphekState:
     fault: int = 0          # DP 102: fault bitmap
     quiet_mode: bool = False  # DP 123
     no_auto_switch: bool = False  # DP 120
+    hour_system: bool = False  # DP 119: True = 24h, False = 12h
 
     # Schedule (parsed from DP 111)
     schedule: list[ScheduleSlot] = field(default_factory=list)
@@ -362,6 +364,7 @@ class OrphekDevice:
             fault=int(_get_dps_value(DP_FAULT, 0)),
             quiet_mode=bool(_get_dps_value(DP_QUIET_MODE, False)),
             no_auto_switch=bool(_get_dps_value(DP_NO_AUTO_SWITCH, False)),
+            hour_system=bool(_get_dps_value(DP_HOUR_SYSTEM, False)),
             schedule=schedule,
             schedule_preset=schedule_preset,
             jellyfish=_parse_jellyfish(dp114) if dp114 else JellyfishConfig(),
@@ -434,7 +437,7 @@ class OrphekDevice:
     def set_brightness(self, brightness: int) -> None:
         """Set brightness by scaling all channels proportionally.
 
-        brightness: target max channel value (0-100).
+        brightness: target max channel value (0-10000, scale=2).
         """
         brightness = max(CHANNEL_MIN, min(CHANNEL_MAX, brightness))
         try:
@@ -488,6 +491,36 @@ class OrphekDevice:
         """Set quiet/silent fan mode."""
         try:
             self._get_device().set_value(DP_QUIET_MODE, quiet)
+        except Exception as err:
+            self._device = None
+            raise OrphekConnectionError(
+                f"Error sending command to {self._host}: {err}"
+            ) from err
+
+    def set_temp_unit(self, unit: str) -> None:
+        """Set temperature display unit ('c' or 'f')."""
+        try:
+            self._get_device().set_value(DP_TEMP_UNIT, unit)
+        except Exception as err:
+            self._device = None
+            raise OrphekConnectionError(
+                f"Error sending command to {self._host}: {err}"
+            ) from err
+
+    def set_hour_system(self, is_24h: bool) -> None:
+        """Set hour system (True = 24h, False = 12h)."""
+        try:
+            self._get_device().set_value(DP_HOUR_SYSTEM, is_24h)
+        except Exception as err:
+            self._device = None
+            raise OrphekConnectionError(
+                f"Error sending command to {self._host}: {err}"
+            ) from err
+
+    def set_no_auto_switch(self, disabled: bool) -> None:
+        """Set no-auto-switch / disable auto-recovery."""
+        try:
+            self._get_device().set_value(DP_NO_AUTO_SWITCH, disabled)
         except Exception as err:
             self._device = None
             raise OrphekConnectionError(

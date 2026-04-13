@@ -16,13 +16,16 @@ from .atop import OrphekAtopApi
 from .const import (
     CONF_ATOP_COUNTRY_CODE,
     CONF_ATOP_EMAIL,
+    CONF_ATOP_PASSWORD,
     CONF_ATOP_SESSION_ID,
     CONF_DEVICE_ID,
     CONF_HOST,
     CONF_LOCAL_KEY,
+    CONF_PRODUCT_ID,
     COUNTRIES,
     DOMAIN,
 )
+from .device_schema import load_schema, list_known_products, save_schema
 from .discovery import discover_orphek_devices
 
 _LOGGER = logging.getLogger(__name__)
@@ -53,7 +56,9 @@ class OrphekConfigFlow(ConfigFlow, domain=DOMAIN):
     def __init__(self) -> None:
         """Initialize the config flow."""
         self._discovered_devices: list[dict[str, Any]] = []
+        self._atop: OrphekAtopApi | None = None
         self._atop_email: str = ""
+        self._atop_password: str = ""
         self._atop_session_id: str = ""
         self._atop_country_code: str = ""
 
@@ -74,16 +79,16 @@ class OrphekConfigFlow(ConfigFlow, domain=DOMAIN):
             password = user_input[CONF_PASSWORD]
             country_code = user_input.get("country_code", "1")
 
-            atop = OrphekAtopApi()
+            self._atop = OrphekAtopApi()
             logged_in = await self.hass.async_add_executor_job(
-                atop.login, email, password, country_code
+                self._atop.login, email, password, country_code
             )
 
             if not logged_in:
                 errors["base"] = "invalid_auth"
             else:
                 # Save session ID for authenticated API calls
-                session_id = atop.session_id
+                session_id = self._atop.session_id
                 if not session_id:
                     errors["base"] = "invalid_auth"
                     _LOGGER.error("Login succeeded but no session ID returned")
@@ -95,7 +100,7 @@ class OrphekConfigFlow(ConfigFlow, domain=DOMAIN):
 
                     # Fetch all cloud devices to get local keys
                     cloud_devices = await self.hass.async_add_executor_job(
-                        atop.get_devices
+                        self._atop.get_devices
                     )
                     cloud_map = {
                         d.get("devId"): d for d in cloud_devices if d.get("devId")
@@ -143,6 +148,7 @@ class OrphekConfigFlow(ConfigFlow, domain=DOMAIN):
 
                     # Save session ID and credentials for the device picker step
                     self._atop_email = email
+                    self._atop_password = password
                     self._atop_session_id = session_id
                     self._atop_country_code = country_code
 
@@ -150,13 +156,25 @@ class OrphekConfigFlow(ConfigFlow, domain=DOMAIN):
                         dev = self._discovered_devices[0]
                         await self.async_set_unique_id(dev["device_id"])
                         self._abort_if_unique_id_configured()
+
+                        # Fetch and save product schema
+                        product_id = await self._fetch_and_save_schema(dev["device_id"])
+
                         return self.async_create_entry(
                             title=f"Orphek ({dev['ip']})",
                             data={
                                 CONF_HOST: dev["ip"],
                                 CONF_DEVICE_ID: dev["device_id"],
                                 CONF_LOCAL_KEY: dev["local_key"],
+                                CONF_PRODUCT_ID: product_id or "",
                                 CONF_ATOP_EMAIL: email,
+                                # Password is stored intentionally so the
+                                # integration can re-authenticate transparently
+                                # when the ATOP session token expires (~90 days).
+                                # The ATOP API has no refresh-token mechanism.
+                                # This follows standard HA practice (same as the
+                                # official Tuya, MQTT, SMTP integrations).
+                                CONF_ATOP_PASSWORD: password,
                                 CONF_ATOP_SESSION_ID: session_id,
                                 CONF_ATOP_COUNTRY_CODE: country_code,
                             },
@@ -206,13 +224,19 @@ class OrphekConfigFlow(ConfigFlow, domain=DOMAIN):
 
                         await self.async_set_unique_id(dev["device_id"])
                         self._abort_if_unique_id_configured()
+
+                        # Fetch and save product schema
+                        product_id = await self._fetch_and_save_schema(dev["device_id"])
+
                         return self.async_create_entry(
                             title=f"Orphek ({dev['ip']})",
                             data={
                                 CONF_HOST: dev["ip"],
                                 CONF_DEVICE_ID: dev["device_id"],
                                 CONF_LOCAL_KEY: dev["local_key"],
+                                CONF_PRODUCT_ID: product_id or "",
                                 CONF_ATOP_EMAIL: self._atop_email,
+                                CONF_ATOP_PASSWORD: self._atop_password,
                                 CONF_ATOP_SESSION_ID: self._atop_session_id,
                                 CONF_ATOP_COUNTRY_CODE: self._atop_country_code,
                             },
@@ -228,6 +252,94 @@ class OrphekConfigFlow(ConfigFlow, domain=DOMAIN):
             data_schema=vol.Schema(
                 {
                     vol.Required("devices"): vol.In(device_options),
+                }
+            ),
+            errors=errors,
+        )
+
+    async def _fetch_and_save_schema(self, device_id: str) -> str | None:
+        """Fetch the device schema from ATOP and save it locally.
+
+        Returns the product_id if successful, None otherwise.
+        """
+        if self._atop is None:
+            return None
+        try:
+            schema = await self.hass.async_add_executor_job(
+                self._atop.get_device_schema, device_id
+            )
+            if schema:
+                product_id = schema.get("product_id", "")
+                known = await self.hass.async_add_executor_job(list_known_products)
+                if product_id and product_id not in known:
+                    import json
+
+                    _LOGGER.warning(
+                        "New Orphek product discovered: '%s' (category: %s). "
+                        "Please report this schema to the integration "
+                        "repository so it can be shipped for other users. "
+                        "Full schema:\n%s",
+                        product_id,
+                        schema.get("category_code", "unknown"),
+                        json.dumps(schema, indent=2),
+                    )
+                await self.hass.async_add_executor_job(save_schema, schema)
+                return product_id
+        except Exception:
+            _LOGGER.warning("Failed to fetch schema for %s", device_id)
+        return None
+
+    # ------------------------------------------------------------------
+    # Re-authentication flow (triggered when stored password no longer works)
+    # ------------------------------------------------------------------
+
+    async def async_step_reauth(
+        self, entry_data: dict[str, Any]
+    ) -> ConfigFlowResult:
+        """Handle re-authentication when credentials have expired."""
+        return await self.async_step_reauth_confirm()
+
+    async def async_step_reauth_confirm(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Show reauth form and re-validate credentials."""
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            email = user_input[CONF_EMAIL]
+            password = user_input[CONF_PASSWORD]
+            reauth_entry = self._get_reauth_entry()
+            country_code = reauth_entry.data.get(CONF_ATOP_COUNTRY_CODE, "1")
+
+            atop = OrphekAtopApi()
+            logged_in = await self.hass.async_add_executor_job(
+                atop.login, email, password, country_code
+            )
+            if not logged_in:
+                errors["base"] = "invalid_auth"
+            else:
+                session_id = atop.session_id
+                if session_id:
+                    return self.async_update_reload_and_abort(
+                        reauth_entry,
+                        data_updates={
+                            CONF_ATOP_EMAIL: email,
+                            CONF_ATOP_PASSWORD: password,
+                            CONF_ATOP_SESSION_ID: session_id,
+                        },
+                    )
+                errors["base"] = "invalid_auth"
+
+        reauth_entry = self._get_reauth_entry()
+        return self.async_show_form(
+            step_id="reauth_confirm",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        CONF_EMAIL,
+                        default=reauth_entry.data.get(CONF_ATOP_EMAIL, ""),
+                    ): str,
+                    vol.Required(CONF_PASSWORD): str,
                 }
             ),
             errors=errors,

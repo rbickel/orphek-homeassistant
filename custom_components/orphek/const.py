@@ -9,6 +9,7 @@ CONF_ATOP_EMAIL = "atop_email"
 CONF_ATOP_PASSWORD = "atop_password"
 CONF_ATOP_SESSION_ID = "atop_session_id"
 CONF_ATOP_COUNTRY_CODE = "atop_country_code"
+CONF_PRODUCT_ID = "product_id"
 
 TUYA_VERSION = 3.4
 
@@ -32,7 +33,8 @@ DP_CH6 = 108
 DP_CHANNELS = [DP_CH1, DP_CH2, DP_CH3, DP_CH4, DP_CH5, DP_CH6]
 
 CHANNEL_MIN = 0
-CHANNEL_MAX = 100
+CHANNEL_MAX = 10000  # Raw range 0-10000, scale=2 → 0.00%-100.00%
+CHANNEL_SCALE = 100   # Divide raw by this to get percentage
 
 # Mode selection
 DP_MODE = 110           # enum: program, quick, sunMoonSync, biorhythm

@@ -1,0 +1,68 @@
+name: New Device Support Request
+description: Request support for a new Orphek device model
+title: "[Device Request] "
+labels: ["new-device", "enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping expand device support! When a new (unsupported) Orphek device is added to the integration, its product schema is automatically logged to the Home Assistant logs. Please include that schema below so we can add native support.
+
+  - type: input
+    id: device_model
+    attributes:
+      label: Device Model
+      description: The Orphek product name (e.g. OR3 iCon LED Bar, Atlantik iCon, Natura iCon)
+      placeholder: "OR3 iCon LED Bar"
+    validations:
+      required: true
+
+  - type: input
+    id: product_id
+    attributes:
+      label: Product ID
+      description: "The Tuya product_id from the log message (e.g. `eh4tcr8zsdshvdrl`)"
+      placeholder: "eh4tcr8zsdshvdrl"
+    validations:
+      required: true
+
+  - type: textarea
+    id: schema_json
+    attributes:
+      label: Product Schema JSON
+      description: |
+        Paste the full JSON schema from the Home Assistant log. When you add an unsupported device, the integration logs a warning like:
+
+        ```
+        New Orphek product discovered: 'xxxxx' (category: wf_ble_dj). Please report this schema...
+        ```
+
+        Copy the full JSON block that follows.
+      render: json
+    validations:
+      required: true
+
+  - type: input
+    id: channel_count
+    attributes:
+      label: Number of LED Channels
+      description: How many independent color channels does the device have?
+      placeholder: "6"
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional_info
+    attributes:
+      label: Additional Information
+      description: Any other relevant details (firmware version, number of devices, features you'd like supported, etc.)
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: testing
+    attributes:
+      label: Testing Availability
+      options:
+        - label: I can test changes on my device
+          required: false
