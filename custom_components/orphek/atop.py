@@ -112,6 +112,14 @@ class OrphekAtopApi:
         """Return the current session ID."""
         return self._sid
 
+    def set_session_id(self, session_id: str) -> None:
+        """Set the session ID for authenticated requests.
+
+        Use this to restore a previously obtained session instead of
+        logging in again with email/password.
+        """
+        self._sid = session_id
+
     def _request(
         self,
         api: str,

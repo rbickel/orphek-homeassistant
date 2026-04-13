@@ -7,6 +7,7 @@ CONF_HOST = "host"
 CONF_LOCAL_KEY = "local_key"
 CONF_ATOP_EMAIL = "atop_email"
 CONF_ATOP_PASSWORD = "atop_password"
+CONF_ATOP_SESSION_ID = "atop_session_id"
 CONF_ATOP_COUNTRY_CODE = "atop_country_code"
 
 TUYA_VERSION = 3.4

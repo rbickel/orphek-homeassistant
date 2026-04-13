@@ -16,7 +16,7 @@ from .atop import OrphekAtopApi
 from .const import (
     CONF_ATOP_COUNTRY_CODE,
     CONF_ATOP_EMAIL,
-    CONF_ATOP_PASSWORD,
+    CONF_ATOP_SESSION_ID,
     CONF_DEVICE_ID,
     CONF_HOST,
     CONF_LOCAL_KEY,
@@ -54,7 +54,7 @@ class OrphekConfigFlow(ConfigFlow, domain=DOMAIN):
         """Initialize the config flow."""
         self._discovered_devices: list[dict[str, Any]] = []
         self._atop_email: str = ""
-        self._atop_password: str = ""
+        self._atop_session_id: str = ""
         self._atop_country_code: str = ""
 
     async def async_step_user(
@@ -82,88 +82,94 @@ class OrphekConfigFlow(ConfigFlow, domain=DOMAIN):
             if not logged_in:
                 errors["base"] = "invalid_auth"
             else:
-                # Discover devices on LAN
-                lan_devices = await self.hass.async_add_executor_job(
-                    discover_orphek_devices
-                )
+                # Save session ID for authenticated API calls
+                session_id = atop.session_id
+                if not session_id:
+                    errors["base"] = "invalid_auth"
+                    _LOGGER.error("Login succeeded but no session ID returned")
+                else:
+                    # Discover devices on LAN
+                    lan_devices = await self.hass.async_add_executor_job(
+                        discover_orphek_devices
+                    )
 
-                # Fetch all cloud devices to get local keys
-                cloud_devices = await self.hass.async_add_executor_job(
-                    atop.get_devices
-                )
-                cloud_map = {
-                    d.get("devId"): d for d in cloud_devices if d.get("devId")
-                }
+                    # Fetch all cloud devices to get local keys
+                    cloud_devices = await self.hass.async_add_executor_job(
+                        atop.get_devices
+                    )
+                    cloud_map = {
+                        d.get("devId"): d for d in cloud_devices if d.get("devId")
+                    }
 
-                existing = {
-                    entry.unique_id for entry in self._async_current_entries()
-                }
-                self._discovered_devices = []
+                    existing = {
+                        entry.unique_id for entry in self._async_current_entries()
+                    }
+                    self._discovered_devices = []
 
-                for dev in lan_devices:
-                    if dev.device_id in existing:
-                        continue
-                    cloud_dev = cloud_map.get(dev.device_id)
-                    if cloud_dev and cloud_dev.get("localKey"):
-                        self._discovered_devices.append(
-                            {
-                                "device_id": dev.device_id,
-                                "ip": dev.ip,
-                                "local_key": cloud_dev["localKey"],
-                            }
-                        )
-
-                # Also add cloud-only devices (not on LAN yet)
-                lan_ids = {d.device_id for d in lan_devices}
-                for dev_id, cloud_dev in cloud_map.items():
-                    if dev_id not in existing and dev_id not in lan_ids:
-                        ip = cloud_dev.get("ip", "")
-                        if ip and cloud_dev.get("localKey"):
+                    for dev in lan_devices:
+                        if dev.device_id in existing:
+                            continue
+                        cloud_dev = cloud_map.get(dev.device_id)
+                        if cloud_dev and cloud_dev.get("localKey"):
                             self._discovered_devices.append(
                                 {
-                                    "device_id": dev_id,
-                                    "ip": ip,
+                                    "device_id": dev.device_id,
+                                    "ip": dev.ip,
                                     "local_key": cloud_dev["localKey"],
                                 }
                             )
 
-                if not self._discovered_devices:
-                    return self.async_abort(reason="no_devices_found")
+                    # Also add cloud-only devices (not on LAN yet)
+                    lan_ids = {d.device_id for d in lan_devices}
+                    for dev_id, cloud_dev in cloud_map.items():
+                        if dev_id not in existing and dev_id not in lan_ids:
+                            ip = cloud_dev.get("ip", "")
+                            if ip and cloud_dev.get("localKey"):
+                                self._discovered_devices.append(
+                                    {
+                                        "device_id": dev_id,
+                                        "ip": ip,
+                                        "local_key": cloud_dev["localKey"],
+                                    }
+                                )
 
-                # Save credentials for the device picker step
-                self._atop_email = email
-                self._atop_password = password
-                self._atop_country_code = country_code
+                    if not self._discovered_devices:
+                        return self.async_abort(reason="no_devices_found")
 
-                if len(self._discovered_devices) == 1:
-                    dev = self._discovered_devices[0]
-                    await self.async_set_unique_id(dev["device_id"])
-                    self._abort_if_unique_id_configured()
-                    return self.async_create_entry(
-                        title=f"Orphek ({dev['ip']})",
-                        data={
-                            CONF_HOST: dev["ip"],
-                            CONF_DEVICE_ID: dev["device_id"],
-                            CONF_LOCAL_KEY: dev["local_key"],
-                            CONF_ATOP_EMAIL: email,
-                            CONF_ATOP_PASSWORD: password,
-                            CONF_ATOP_COUNTRY_CODE: country_code,
-                        },
+                    # Save session ID and credentials for the device picker step
+                    self._atop_email = email
+                    self._atop_session_id = session_id
+                    self._atop_country_code = country_code
+
+                    if len(self._discovered_devices) == 1:
+                        dev = self._discovered_devices[0]
+                        await self.async_set_unique_id(dev["device_id"])
+                        self._abort_if_unique_id_configured()
+                        return self.async_create_entry(
+                            title=f"Orphek ({dev['ip']})",
+                            data={
+                                CONF_HOST: dev["ip"],
+                                CONF_DEVICE_ID: dev["device_id"],
+                                CONF_LOCAL_KEY: dev["local_key"],
+                                CONF_ATOP_EMAIL: email,
+                                CONF_ATOP_SESSION_ID: session_id,
+                                CONF_ATOP_COUNTRY_CODE: country_code,
+                            },
+                        )
+
+                    # Multiple devices available — show picker for a single device
+                    device_options = {
+                        dev["device_id"]: f"{dev['ip']} ({dev['device_id'][:8]}...)"
+                        for dev in self._discovered_devices
+                    }
+                    return self.async_show_form(
+                        step_id="pick_device",
+                        data_schema=vol.Schema(
+                            {
+                                vol.Required("devices"): vol.In(device_options),
+                            }
+                        ),
                     )
-
-                # Multiple devices available — show picker for a single device
-                device_options = {
-                    dev["device_id"]: f"{dev['ip']} ({dev['device_id'][:8]}...)"
-                    for dev in self._discovered_devices
-                }
-                return self.async_show_form(
-                    step_id="pick_device",
-                    data_schema=vol.Schema(
-                        {
-                            vol.Required("devices"): vol.In(device_options),
-                        }
-                    ),
-                )
 
         return self.async_show_form(
             step_id="orphek_login",
@@ -195,7 +201,7 @@ class OrphekConfigFlow(ConfigFlow, domain=DOMAIN):
                             CONF_DEVICE_ID: dev["device_id"],
                             CONF_LOCAL_KEY: dev["local_key"],
                             CONF_ATOP_EMAIL: self._atop_email,
-                            CONF_ATOP_PASSWORD: self._atop_password,
+                            CONF_ATOP_SESSION_ID: self._atop_session_id,
                             CONF_ATOP_COUNTRY_CODE: self._atop_country_code,
                         },
                     )
