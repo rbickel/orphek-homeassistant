@@ -13,7 +13,6 @@ from homeassistant.core import HomeAssistant
 
 from .api import OrphekDevice
 from .atop import OrphekAtopApi
-from .cloud import TuyaCloudApi
 from .const import (
     CONF_ATOP_COUNTRY_CODE,
     CONF_ATOP_EMAIL,
@@ -23,39 +22,16 @@ from .const import (
     CONF_LOCAL_KEY,
     COUNTRIES,
     DOMAIN,
-    TUYA_API_KEY,
-    TUYA_API_REGION,
-    TUYA_API_SECRET,
 )
 from .discovery import discover_orphek_devices
 
 _LOGGER = logging.getLogger(__name__)
-
-STEP_USER_SCHEMA = vol.Schema(
-    {
-        vol.Required("method", default="orphek"): vol.In(
-            {
-                "orphek": "Orphek account (email/password)",
-                "auto": "Auto-discover (requires Tuya IoT project)",
-                "manual": "Manual setup",
-            }
-        ),
-    }
-)
 
 STEP_ORPHEK_LOGIN_SCHEMA = vol.Schema(
     {
         vol.Required(CONF_EMAIL): str,
         vol.Required(CONF_PASSWORD): str,
         vol.Required("country_code", default="1"): vol.In(COUNTRIES),
-    }
-)
-
-STEP_MANUAL_SCHEMA = vol.Schema(
-    {
-        vol.Required(CONF_HOST): str,
-        vol.Required(CONF_DEVICE_ID): str,
-        vol.Required(CONF_LOCAL_KEY): str,
     }
 )
 
@@ -84,15 +60,8 @@ class OrphekConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Handle the initial step."""
-        if user_input is not None:
-            if user_input["method"] == "orphek":
-                return await self.async_step_orphek_login()
-            if user_input["method"] == "auto":
-                return await self.async_step_discover()
-            return await self.async_step_manual()
-
-        return self.async_show_form(step_id="user", data_schema=STEP_USER_SCHEMA)
+        """Handle the initial step — go straight to Orphek login."""
+        return await self.async_step_orphek_login()
 
     async def async_step_orphek_login(
         self, user_input: dict[str, Any] | None = None
@@ -188,7 +157,7 @@ class OrphekConfigFlow(ConfigFlow, domain=DOMAIN):
                     for dev in self._discovered_devices
                 }
                 return self.async_show_form(
-                    step_id="discover",
+                    step_id="pick_device",
                     data_schema=vol.Schema(
                         {
                             vol.Required("devices"): vol.All(
@@ -205,136 +174,26 @@ class OrphekConfigFlow(ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
-    async def async_step_discover(
+    async def async_step_pick_device(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Discover Orphek devices on LAN and fetch their local keys."""
-        errors: dict[str, str] = {}
-
+        """Handle device selection when multiple devices are found."""
         if user_input is not None:
             selected = user_input.get("devices", [])
-            if not selected:
-                errors["base"] = "no_devices_selected"
-            else:
-                for dev in self._discovered_devices:
-                    if dev["device_id"] in selected:
-                        await self.async_set_unique_id(dev["device_id"])
-                        self._abort_if_unique_id_configured()
-                        data = {
+            for dev in self._discovered_devices:
+                if dev["device_id"] in selected:
+                    await self.async_set_unique_id(dev["device_id"])
+                    self._abort_if_unique_id_configured()
+                    return self.async_create_entry(
+                        title=f"Orphek ({dev['ip']})",
+                        data={
                             CONF_HOST: dev["ip"],
                             CONF_DEVICE_ID: dev["device_id"],
                             CONF_LOCAL_KEY: dev["local_key"],
-                        }
-                        if self._atop_email:
-                            data[CONF_ATOP_EMAIL] = self._atop_email
-                            data[CONF_ATOP_PASSWORD] = self._atop_password
-                            data[CONF_ATOP_COUNTRY_CODE] = self._atop_country_code
-                        return self.async_create_entry(
-                            title=f"Orphek ({dev['ip']})",
-                            data=data,
-                        )
+                            CONF_ATOP_EMAIL: self._atop_email,
+                            CONF_ATOP_PASSWORD: self._atop_password,
+                            CONF_ATOP_COUNTRY_CODE: self._atop_country_code,
+                        },
+                    )
 
-        # Discover devices on LAN
-        lan_devices = await self.hass.async_add_executor_job(discover_orphek_devices)
-        _LOGGER.debug("LAN discovery found %d Orphek devices", len(lan_devices))
-
-        if not lan_devices:
-            return self.async_abort(reason="no_devices_found")
-
-        # Fetch local keys from cloud for each discovered device
-        cloud = TuyaCloudApi(TUYA_API_KEY, TUYA_API_SECRET, TUYA_API_REGION)
-
-        existing = {entry.unique_id for entry in self._async_current_entries()}
-        self._discovered_devices = []
-
-        for dev in lan_devices:
-            if dev.device_id in existing:
-                continue
-
-            local_key = await self.hass.async_add_executor_job(
-                cloud.get_device_local_key, dev.device_id
-            )
-            if local_key:
-                self._discovered_devices.append(
-                    {
-                        "device_id": dev.device_id,
-                        "ip": dev.ip,
-                        "local_key": local_key,
-                    }
-                )
-            else:
-                _LOGGER.debug(
-                    "No cloud key for %s — device may need SmartLife pairing",
-                    dev.device_id,
-                )
-
-        if not self._discovered_devices:
-            return self.async_abort(reason="no_keys_found")
-
-        # Single device — add directly
-        if len(self._discovered_devices) == 1:
-            dev = self._discovered_devices[0]
-            await self.async_set_unique_id(dev["device_id"])
-            self._abort_if_unique_id_configured()
-            return self.async_create_entry(
-                title=f"Orphek ({dev['ip']})",
-                data={
-                    CONF_HOST: dev["ip"],
-                    CONF_DEVICE_ID: dev["device_id"],
-                    CONF_LOCAL_KEY: dev["local_key"],
-                },
-            )
-
-        # Multiple devices — let user pick
-        device_options = {
-            dev["device_id"]: f"{dev['ip']} ({dev['device_id'][:8]}...)"
-            for dev in self._discovered_devices
-        }
-        return self.async_show_form(
-            step_id="discover",
-            data_schema=vol.Schema(
-                {
-                    vol.Required("devices"): vol.All(
-                        [vol.In(device_options)],
-                        vol.Length(min=1),
-                    ),
-                }
-            ),
-            errors=errors,
-        )
-
-    async def async_step_manual(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Handle manual device entry."""
-        errors: dict[str, str] = {}
-
-        if user_input is not None:
-            local_key = user_input[CONF_LOCAL_KEY].strip()
-
-            await self.async_set_unique_id(user_input[CONF_DEVICE_ID])
-            self._abort_if_unique_id_configured()
-
-            connected = await _test_device(
-                self.hass,
-                user_input[CONF_HOST],
-                user_input[CONF_DEVICE_ID],
-                local_key,
-            )
-            if not connected:
-                errors["base"] = "cannot_connect"
-            else:
-                return self.async_create_entry(
-                    title=f"Orphek ({user_input[CONF_HOST]})",
-                    data={
-                        CONF_HOST: user_input[CONF_HOST],
-                        CONF_DEVICE_ID: user_input[CONF_DEVICE_ID],
-                        CONF_LOCAL_KEY: local_key,
-                    },
-                )
-
-        return self.async_show_form(
-            step_id="manual",
-            data_schema=STEP_MANUAL_SCHEMA,
-            errors=errors,
-        )
+        return self.async_abort(reason="no_devices_selected")
