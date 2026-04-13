@@ -149,6 +149,22 @@ class OrphekScheduleSensor(CoordinatorEntity[OrphekCoordinator], SensorEntity):
         slots = self.coordinator.data.schedule
         return _format_schedule(slots) if slots else "No schedule"
 
+    @property
+    def extra_state_attributes(self) -> dict | None:
+        if self.coordinator.data is None:
+            return None
+        slots = self.coordinator.data.schedule
+        return {
+            "slots": [
+                {
+                    "hour": s.hour,
+                    "minute": s.minute,
+                    "channels": s.channels,
+                }
+                for s in slots
+            ]
+        }
+
 
 class OrphekSchedulePresetSensor(CoordinatorEntity[OrphekCoordinator], SensorEntity):
     """Preset program schedule sensor."""
