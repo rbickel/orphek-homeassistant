@@ -102,10 +102,16 @@ def _sign(params: dict[str, str]) -> str:
 class OrphekAtopApi:
     """Client for the Orphek ATOP mobile API."""
 
+    # Error code returned by the ATOP API when the session has expired
+    SESSION_INVALID = "USER_SESSION_INVALID"
+
     def __init__(self, region: str = "eu") -> None:
         self._endpoint = ATOP_ENDPOINTS.get(region, ATOP_ENDPOINTS["eu"])
         self._session = requests.Session()
         self._sid: str | None = None
+        self._email: str | None = None
+        self._password: str | None = None
+        self._country_code: str = "1"
 
     @property
     def session_id(self) -> str | None:
@@ -211,6 +217,15 @@ class OrphekAtopApi:
 
         Returns True on success. Sets self._sid.
         """
+        # Store credentials for transparent re-login on session expiry.
+        # This is intentional: the ATOP API has no refresh-token mechanism,
+        # so we keep the password in memory to re-authenticate automatically
+        # when the session token expires (~90 days). The password is also
+        # persisted in HA's config entry storage (standard HA practice, same
+        # as the official Tuya, MQTT, SMTP integrations) to survive restarts.
+        self._email = email
+        self._password = password
+        self._country_code = country_code
         # Step 1: Get login token
         token_resp = self._request(
             "thing.m.user.email.token.create",
@@ -256,6 +271,18 @@ class OrphekAtopApi:
         _LOGGER.info("Orphek ATOP login successful")
         return True
 
+    def relogin(self) -> bool:
+        """Re-authenticate using stored credentials.
+
+        Returns True if login succeeds, False if credentials are missing
+        or the login fails (e.g. password changed).
+        """
+        if not self._email or not self._password:
+            _LOGGER.warning("Cannot re-login: no stored credentials")
+            return False
+        _LOGGER.info("Re-authenticating with stored ATOP credentials")
+        return self.login(self._email, self._password, self._country_code)
+
     def get_devices(self) -> list[dict[str, Any]]:
         """Get all devices across all homes for the logged-in user."""
         if not self._sid:
@@ -267,7 +294,13 @@ class OrphekAtopApi:
             "thing.m.location.list", "2.1", {}, encrypt=False,
         )
         if not loc_resp.get("success"):
-            _LOGGER.error(
+            # Auto-relogin on session expiry
+            if loc_resp.get("errorCode") == self.SESSION_INVALID and self.relogin():
+                loc_resp = self._request(
+                    "thing.m.location.list", "2.1", {}, encrypt=False,
+                )
+            if not loc_resp.get("success"):
+                _LOGGER.error(
                 "Failed to get locations: %s",
                 loc_resp.get("errorMsg", loc_resp.get("errorCode")),
             )
@@ -327,11 +360,20 @@ class OrphekAtopApi:
         )
 
         if not result.get("success"):
-            _LOGGER.error(
-                "Failed to get device DPS: %s",
-                result.get("errorMsg", result.get("errorCode")),
-            )
-            return {}
+            # Auto-relogin on session expiry
+            if result.get("errorCode") == self.SESSION_INVALID and self.relogin():
+                result = self._request(
+                    "tuya.m.device.dp.get",
+                    "1.0",
+                    {"devId": device_id},
+                    encrypt=False,
+                )
+            if not result.get("success"):
+                _LOGGER.error(
+                    "Failed to get device DPS: %s",
+                    result.get("errorMsg", result.get("errorCode")),
+                )
+                return {}
 
         return result.get("result", {})
 
@@ -366,11 +408,20 @@ class OrphekAtopApi:
             encrypt=False,
         )
         if not resp.get("success") or not resp.get("result"):
-            _LOGGER.error(
-                "Failed to get device schema: %s",
-                resp.get("errorMsg", resp.get("errorCode")),
-            )
-            return None
+            # Auto-relogin on session expiry
+            if resp.get("errorCode") == self.SESSION_INVALID and self.relogin():
+                resp = self._request(
+                    "thing.m.device.ref.info.my.list",
+                    "1.0",
+                    {"devId": device_id},
+                    encrypt=False,
+                )
+            if not resp.get("success") or not resp.get("result"):
+                _LOGGER.error(
+                    "Failed to get device schema: %s",
+                    resp.get("errorMsg", resp.get("errorCode")),
+                )
+                return None
 
         product = resp["result"][0]
         try:

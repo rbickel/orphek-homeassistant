@@ -1,8 +1,9 @@
-"""Device schema persistence for Orphek integration.
+"""Product schema persistence for Orphek integration.
 
-Schemas are stored in the HA config directory under
-``custom_components/orphek/devices/<device_id>.json`` so they survive
-restarts and can be committed to the repository for known devices.
+Schemas are keyed by **product_id** (Tuya product model), not by physical
+device ID.  All devices of the same model share the same schema, so the
+files in ``custom_components/orphek/devices/<product_id>.json`` can be
+committed to the repository and will work for every user who owns that model.
 """
 
 from __future__ import annotations
@@ -24,23 +25,26 @@ def _ensure_dir() -> Path:
     return _DEVICES_DIR
 
 
-def save_schema(device_id: str, schema: dict[str, Any]) -> Path:
-    """Persist a device schema to disk.
+def save_schema(schema: dict[str, Any]) -> Path:
+    """Persist a product schema to disk, keyed by product_id.
 
     Returns the path to the saved file.
     """
-    path = _ensure_dir() / f"{device_id}.json"
+    product_id = schema.get("product_id", "")
+    if not product_id:
+        raise ValueError("Schema must contain a non-empty 'product_id'")
+    path = _ensure_dir() / f"{product_id}.json"
     path.write_text(json.dumps(schema, indent=2, sort_keys=True), encoding="utf-8")
-    _LOGGER.info("Saved device schema to %s", path)
+    _LOGGER.info("Saved product schema to %s", path)
     return path
 
 
-def load_schema(device_id: str) -> dict[str, Any] | None:
-    """Load a previously saved device schema.
+def load_schema(product_id: str) -> dict[str, Any] | None:
+    """Load a previously saved product schema.
 
     Returns None if no schema file exists.
     """
-    path = _DEVICES_DIR / f"{device_id}.json"
+    path = _DEVICES_DIR / f"{product_id}.json"
     if not path.is_file():
         return None
     try:
@@ -50,8 +54,8 @@ def load_schema(device_id: str) -> dict[str, Any] | None:
         return None
 
 
-def list_known_devices() -> list[str]:
-    """Return device IDs for which we have stored schemas."""
+def list_known_products() -> list[str]:
+    """Return product IDs for which we have stored schemas."""
     if not _DEVICES_DIR.is_dir():
         return []
     return [p.stem for p in _DEVICES_DIR.glob("*.json")]

@@ -32,6 +32,14 @@
           "device_id": "Device ID",
           "local_key": "Local Key"
         }
+      },
+      "reauth_confirm": {
+        "title": "Re-authenticate Orphek Account",
+        "description": "Your Orphek cloud session has expired and automatic re-login failed. Please re-enter your credentials.",
+        "data": {
+          "email": "Email",
+          "password": "Password"
+        }
       }
     },
     "abort": {

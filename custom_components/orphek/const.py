@@ -9,6 +9,7 @@ CONF_ATOP_EMAIL = "atop_email"
 CONF_ATOP_PASSWORD = "atop_password"
 CONF_ATOP_SESSION_ID = "atop_session_id"
 CONF_ATOP_COUNTRY_CODE = "atop_country_code"
+CONF_PRODUCT_ID = "product_id"
 
 TUYA_VERSION = 3.4
 
