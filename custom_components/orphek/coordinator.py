@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import timedelta
 
@@ -36,11 +37,17 @@ class OrphekCoordinator(DataUpdateCoordinator[OrphekState]):
         self._atop = atop
         self._poll_count = 0
         self._cloud_dps: dict = {}
+        self._device_io_lock = asyncio.Lock()
+
+    async def async_device_io(self, func, *args):
+        """Serialize access to the shared local device transport."""
+        async with self._device_io_lock:
+            return await self.hass.async_add_executor_job(func, *args)
 
     async def _async_update_data(self) -> OrphekState:
         """Fetch data from the Orphek device (local + periodic cloud)."""
         try:
-            state = await self.hass.async_add_executor_job(self.device.get_state)
+            state = await self.async_device_io(self.device.get_state)
         except OrphekApiError as err:
             raise UpdateFailed(
                 f"Error communicating with Orphek device: {err}"
