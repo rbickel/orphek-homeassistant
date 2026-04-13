@@ -1,0 +1,341 @@
+{
+  "category": "dj",
+  "category_code": "wf_ble_dj",
+  "dps": {
+    "101": {
+      "code": "temperature",
+      "mode": "ro",
+      "property": {
+        "max": 100,
+        "min": 0,
+        "scale": 0,
+        "step": 1,
+        "type": "value",
+        "unit": "\u00b0C"
+      },
+      "type": "value"
+    },
+    "102": {
+      "code": "fault",
+      "mode": "ro",
+      "property": {
+        "label": [
+          "overheat"
+        ],
+        "maxlen": 1,
+        "type": "bitmap"
+      },
+      "type": "bitmap"
+    },
+    "103": {
+      "code": "CH1",
+      "mode": "rw",
+      "property": {
+        "max": 10000,
+        "min": 0,
+        "scale": 2,
+        "step": 1,
+        "type": "value",
+        "unit": "%"
+      },
+      "type": "value"
+    },
+    "104": {
+      "code": "CH2",
+      "mode": "rw",
+      "property": {
+        "max": 10000,
+        "min": 0,
+        "scale": 2,
+        "step": 1,
+        "type": "value",
+        "unit": "%"
+      },
+      "type": "value"
+    },
+    "105": {
+      "code": "CH3",
+      "mode": "rw",
+      "property": {
+        "max": 10000,
+        "min": 0,
+        "scale": 2,
+        "step": 1,
+        "type": "value",
+        "unit": "%"
+      },
+      "type": "value"
+    },
+    "106": {
+      "code": "CH4",
+      "mode": "rw",
+      "property": {
+        "max": 10000,
+        "min": 0,
+        "scale": 2,
+        "step": 1,
+        "type": "value",
+        "unit": "%"
+      },
+      "type": "value"
+    },
+    "107": {
+      "code": "CH5",
+      "mode": "rw",
+      "property": {
+        "max": 10000,
+        "min": 0,
+        "scale": 2,
+        "step": 1,
+        "type": "value",
+        "unit": "%"
+      },
+      "type": "value"
+    },
+    "108": {
+      "code": "CH6",
+      "mode": "rw",
+      "property": {
+        "max": 10000,
+        "min": 0,
+        "scale": 2,
+        "step": 1,
+        "type": "value",
+        "unit": "%"
+      },
+      "type": "value"
+    },
+    "109": {
+      "code": "quick_preset",
+      "mode": "rw",
+      "property": {
+        "maxlen": 128,
+        "type": "raw"
+      },
+      "type": "raw"
+    },
+    "110": {
+      "code": "mode",
+      "mode": "rw",
+      "property": {
+        "range": [
+          "program",
+          "quick",
+          "sunMoonSync",
+          "biorhythm"
+        ],
+        "type": "enum"
+      },
+      "type": "enum"
+    },
+    "111": {
+      "code": "program_mode",
+      "mode": "rw",
+      "property": {
+        "maxlen": 128,
+        "type": "raw"
+      },
+      "type": "raw"
+    },
+    "112": {
+      "code": "program_preset",
+      "mode": "rw",
+      "property": {
+        "maxlen": 128,
+        "type": "raw"
+      },
+      "type": "raw"
+    },
+    "113": {
+      "code": "program_preview",
+      "mode": "rw",
+      "property": {
+        "maxlen": 128,
+        "type": "raw"
+      },
+      "type": "raw"
+    },
+    "114": {
+      "code": "jellyfish_mode",
+      "mode": "rw",
+      "property": {
+        "maxlen": 255,
+        "type": "raw"
+      },
+      "type": "raw"
+    },
+    "115": {
+      "code": "clouds_mode",
+      "mode": "rw",
+      "property": {
+        "maxlen": 128,
+        "type": "raw"
+      },
+      "type": "raw"
+    },
+    "116": {
+      "code": "acclimation_mode",
+      "mode": "rw",
+      "property": {
+        "maxlen": 255,
+        "type": "raw"
+      },
+      "type": "raw"
+    },
+    "117": {
+      "code": "lunar_mode",
+      "mode": "rw",
+      "property": {
+        "maxlen": 255,
+        "type": "raw"
+      },
+      "type": "raw"
+    },
+    "118": {
+      "code": "device_time",
+      "mode": "rw",
+      "property": {
+        "maxlen": 128,
+        "type": "raw"
+      },
+      "type": "raw"
+    },
+    "119": {
+      "code": "hour_system",
+      "mode": "rw",
+      "property": {
+        "type": "bool"
+      },
+      "type": "bool"
+    },
+    "120": {
+      "code": "no_auto_switch",
+      "mode": "rw",
+      "property": {
+        "type": "bool"
+      },
+      "type": "bool"
+    },
+    "121": {
+      "code": "model",
+      "mode": "ro",
+      "property": {
+        "range": [
+          "6",
+          "5",
+          "4",
+          "3",
+          "2",
+          "1"
+        ],
+        "type": "enum"
+      },
+      "type": "enum"
+    },
+    "122": {
+      "code": "mode_running",
+      "mode": "ro",
+      "property": {
+        "range": [
+          "program",
+          "quick",
+          "jellyfish",
+          "clouds",
+          "acclimation",
+          "lunar",
+          "sun_moon",
+          "biorhythm"
+        ],
+        "type": "enum"
+      },
+      "type": "enum"
+    },
+    "123": {
+      "code": "quiet_mode",
+      "mode": "rw",
+      "property": {
+        "type": "bool"
+      },
+      "type": "bool"
+    },
+    "124": {
+      "code": "temp_current_f",
+      "mode": "ro",
+      "property": {
+        "max": 212,
+        "min": 32,
+        "scale": 0,
+        "step": 1,
+        "type": "value",
+        "unit": "\u2109"
+      },
+      "type": "value"
+    },
+    "125": {
+      "code": "temp_unit_convert",
+      "mode": "rw",
+      "property": {
+        "range": [
+          "c",
+          "f"
+        ],
+        "type": "enum"
+      },
+      "type": "enum"
+    },
+    "126": {
+      "code": "biorhythm",
+      "mode": "rw",
+      "property": {
+        "maxlen": 128,
+        "type": "raw"
+      },
+      "type": "raw"
+    },
+    "127": {
+      "code": "sun_moon_sync",
+      "mode": "rw",
+      "property": {
+        "maxlen": 128,
+        "type": "raw"
+      },
+      "type": "raw"
+    },
+    "20": {
+      "code": "switch_led",
+      "mode": "rw",
+      "property": {
+        "type": "bool"
+      },
+      "type": "bool"
+    },
+    "21": {
+      "code": "work_mode",
+      "mode": "rw",
+      "property": {
+        "range": [
+          "white",
+          "colour",
+          "scene",
+          "music"
+        ],
+        "type": "enum"
+      },
+      "type": "enum"
+    },
+    "22": {
+      "code": "bright_value",
+      "mode": "rw",
+      "property": {
+        "max": 1000,
+        "min": 10,
+        "scale": 0,
+        "step": 1,
+        "type": "value",
+        "unit": ""
+      },
+      "type": "value"
+    }
+  },
+  "product_id": "eh4tcr8zsdshvdrl"
+}

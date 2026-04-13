@@ -41,7 +41,6 @@ async def async_setup_entry(
     async_add_entities([
         OrphekTemperatureCelsiusSensor(coordinator, entry, device_info),
         OrphekTemperatureFahrenheitSensor(coordinator, entry, device_info),
-        OrphekModeSensor(coordinator, entry, device_info),
         OrphekModeRunningSensor(coordinator, entry, device_info),
         OrphekScheduleSensor(coordinator, entry, device_info),
         OrphekSchedulePresetSensor(coordinator, entry, device_info),
@@ -100,30 +99,6 @@ class OrphekTemperatureFahrenheitSensor(CoordinatorEntity[OrphekCoordinator], Se
         if self.coordinator.data is None:
             return None
         return self.coordinator.data.temperature_f
-
-
-class OrphekModeSensor(CoordinatorEntity[OrphekCoordinator], SensorEntity):
-    """Selected mode sensor for the Orphek light."""
-
-    _attr_has_entity_name = True
-    _attr_name = "Mode"
-    _attr_icon = "mdi:lightbulb-cog"
-
-    def __init__(
-        self,
-        coordinator: OrphekCoordinator,
-        entry: OrphekConfigEntry,
-        device_info: DeviceInfo,
-    ) -> None:
-        super().__init__(coordinator)
-        self._attr_unique_id = f"{entry.unique_id}_mode"
-        self._attr_device_info = device_info
-
-    @property
-    def native_value(self) -> str | None:
-        if self.coordinator.data is None:
-            return None
-        return self.coordinator.data.mode
 
 
 class OrphekModeRunningSensor(CoordinatorEntity[OrphekCoordinator], SensorEntity):

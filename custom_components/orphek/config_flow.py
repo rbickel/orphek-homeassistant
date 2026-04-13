@@ -23,6 +23,7 @@ from .const import (
     COUNTRIES,
     DOMAIN,
 )
+from .device_schema import load_schema, save_schema
 from .discovery import discover_orphek_devices
 
 _LOGGER = logging.getLogger(__name__)
@@ -53,6 +54,7 @@ class OrphekConfigFlow(ConfigFlow, domain=DOMAIN):
     def __init__(self) -> None:
         """Initialize the config flow."""
         self._discovered_devices: list[dict[str, Any]] = []
+        self._atop: OrphekAtopApi | None = None
         self._atop_email: str = ""
         self._atop_session_id: str = ""
         self._atop_country_code: str = ""
@@ -74,16 +76,16 @@ class OrphekConfigFlow(ConfigFlow, domain=DOMAIN):
             password = user_input[CONF_PASSWORD]
             country_code = user_input.get("country_code", "1")
 
-            atop = OrphekAtopApi()
+            self._atop = OrphekAtopApi()
             logged_in = await self.hass.async_add_executor_job(
-                atop.login, email, password, country_code
+                self._atop.login, email, password, country_code
             )
 
             if not logged_in:
                 errors["base"] = "invalid_auth"
             else:
                 # Save session ID for authenticated API calls
-                session_id = atop.session_id
+                session_id = self._atop.session_id
                 if not session_id:
                     errors["base"] = "invalid_auth"
                     _LOGGER.error("Login succeeded but no session ID returned")
@@ -95,7 +97,7 @@ class OrphekConfigFlow(ConfigFlow, domain=DOMAIN):
 
                     # Fetch all cloud devices to get local keys
                     cloud_devices = await self.hass.async_add_executor_job(
-                        atop.get_devices
+                        self._atop.get_devices
                     )
                     cloud_map = {
                         d.get("devId"): d for d in cloud_devices if d.get("devId")
@@ -150,6 +152,10 @@ class OrphekConfigFlow(ConfigFlow, domain=DOMAIN):
                         dev = self._discovered_devices[0]
                         await self.async_set_unique_id(dev["device_id"])
                         self._abort_if_unique_id_configured()
+
+                        # Fetch and save device schema
+                        await self._fetch_and_save_schema(dev["device_id"])
+
                         return self.async_create_entry(
                             title=f"Orphek ({dev['ip']})",
                             data={
@@ -206,6 +212,10 @@ class OrphekConfigFlow(ConfigFlow, domain=DOMAIN):
 
                         await self.async_set_unique_id(dev["device_id"])
                         self._abort_if_unique_id_configured()
+
+                        # Fetch and save device schema
+                        await self._fetch_and_save_schema(dev["device_id"])
+
                         return self.async_create_entry(
                             title=f"Orphek ({dev['ip']})",
                             data={
@@ -232,3 +242,18 @@ class OrphekConfigFlow(ConfigFlow, domain=DOMAIN):
             ),
             errors=errors,
         )
+
+    async def _fetch_and_save_schema(self, device_id: str) -> None:
+        """Fetch the device schema from ATOP and save it locally."""
+        if self._atop is None:
+            return
+        try:
+            schema = await self.hass.async_add_executor_job(
+                self._atop.get_device_schema, device_id
+            )
+            if schema:
+                await self.hass.async_add_executor_job(
+                    save_schema, device_id, schema
+                )
+        except Exception:
+            _LOGGER.warning("Failed to fetch schema for %s", device_id)

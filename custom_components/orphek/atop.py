@@ -334,3 +334,66 @@ class OrphekAtopApi:
             return {}
 
         return result.get("result", {})
+
+    def get_device_schema(self, device_id: str) -> dict[str, Any] | None:
+        """Fetch the full product schema for a device.
+
+        Returns a normalised dict containing device metadata and DP definitions,
+        or None on failure.  The response comes from
+        ``thing.m.device.ref.info.my.list`` and is reshaped into::
+
+            {
+                "product_id": "eh4tcr8z...",
+                "category": "dj",
+                "category_code": "wf_ble_dj",
+                "dps": {
+                    "20": {"code": "switch_led", "mode": "rw", "type": "bool",
+                           "property": {"type": "bool"}},
+                    "110": {"code": "mode", "mode": "rw", "type": "enum",
+                            "property": {"range": [...], "type": "enum"}},
+                    ...
+                }
+            }
+        """
+        if not self._sid:
+            _LOGGER.error("Not logged in")
+            return None
+
+        resp = self._request(
+            "thing.m.device.ref.info.my.list",
+            "1.0",
+            {"devId": device_id},
+            encrypt=False,
+        )
+        if not resp.get("success") or not resp.get("result"):
+            _LOGGER.error(
+                "Failed to get device schema: %s",
+                resp.get("errorMsg", resp.get("errorCode")),
+            )
+            return None
+
+        product = resp["result"][0]
+        try:
+            import json as _json
+
+            raw_schema = _json.loads(product["schemaInfo"]["schema"])
+        except (KeyError, TypeError, _json.JSONDecodeError) as err:
+            _LOGGER.error("Failed to parse schema JSON: %s", err)
+            return None
+
+        dps: dict[str, dict[str, Any]] = {}
+        for dp in raw_schema:
+            dp_id = str(dp["id"])
+            dps[dp_id] = {
+                "code": dp.get("code", ""),
+                "mode": dp.get("mode", ""),
+                "type": dp.get("subType", ""),
+                "property": dp.get("property", {}),
+            }
+
+        return {
+            "product_id": product.get("id", ""),
+            "category": product.get("category", ""),
+            "category_code": product.get("categoryCode", ""),
+            "dps": dps,
+        }

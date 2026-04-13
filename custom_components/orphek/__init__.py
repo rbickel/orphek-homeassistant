@@ -21,10 +21,18 @@ from .const import (
     DOMAIN,
 )
 from .coordinator import OrphekCoordinator
+from .device_schema import load_schema, save_schema
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS: list[Platform] = [Platform.BINARY_SENSOR, Platform.LIGHT, Platform.SENSOR]
+PLATFORMS: list[Platform] = [
+    Platform.BINARY_SENSOR,
+    Platform.LIGHT,
+    Platform.NUMBER,
+    Platform.SELECT,
+    Platform.SENSOR,
+    Platform.SWITCH,
+]
 
 type OrphekConfigEntry = ConfigEntry[OrphekCoordinator]
 
@@ -63,7 +71,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: OrphekConfigEntry) -> bo
                 _LOGGER.warning("ATOP cloud login failed; schedule data unavailable")
                 atop = None
 
-    coordinator = OrphekCoordinator(hass, device, atop=atop)
+    # Load device schema (fetched during config flow)
+    device_id = entry.data[CONF_DEVICE_ID]
+    schema = await hass.async_add_executor_job(load_schema, device_id)
+    if schema is None and atop is not None:
+        # Schema missing — try to fetch it now
+        try:
+            schema = await hass.async_add_executor_job(
+                atop.get_device_schema, device_id
+            )
+            if schema:
+                await hass.async_add_executor_job(save_schema, device_id, schema)
+        except Exception:
+            _LOGGER.warning("Failed to fetch device schema for %s", device_id)
+
+    coordinator = OrphekCoordinator(hass, device, atop=atop, schema=schema)
     await coordinator.async_config_entry_first_refresh()
     entry.runtime_data = coordinator
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)

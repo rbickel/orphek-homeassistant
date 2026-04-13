@@ -26,6 +26,7 @@ class OrphekCoordinator(DataUpdateCoordinator[OrphekState]):
         hass: HomeAssistant,
         device: OrphekDevice,
         atop: OrphekAtopApi | None = None,
+        schema: dict | None = None,
     ) -> None:
         super().__init__(
             hass,
@@ -35,6 +36,7 @@ class OrphekCoordinator(DataUpdateCoordinator[OrphekState]):
         )
         self.device = device
         self._atop = atop
+        self.schema = schema
         self._poll_count = 0
         self._cloud_dps: dict = {}
         self._device_io_lock = asyncio.Lock()

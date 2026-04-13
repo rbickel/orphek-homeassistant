@@ -32,7 +32,8 @@ DP_CH6 = 108
 DP_CHANNELS = [DP_CH1, DP_CH2, DP_CH3, DP_CH4, DP_CH5, DP_CH6]
 
 CHANNEL_MIN = 0
-CHANNEL_MAX = 100
+CHANNEL_MAX = 10000  # Raw range 0-10000, scale=2 → 0.00%-100.00%
+CHANNEL_SCALE = 100   # Divide raw by this to get percentage
 
 # Mode selection
 DP_MODE = 110           # enum: program, quick, sunMoonSync, biorhythm
