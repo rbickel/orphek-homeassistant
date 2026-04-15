@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -16,7 +16,6 @@ from custom_components.orphek.const import (
     CONF_HOST,
     CONF_LOCAL_KEY,
     CONF_PRODUCT_ID,
-    DOMAIN,
 )
 from custom_components.orphek.coordinator import OrphekCoordinator
 
@@ -122,11 +121,12 @@ def device_info():
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture
 def auto_enable_custom_integrations(enable_custom_integrations):
-    """Enable custom integrations in all tests.
+    """Enable custom integrations in integration tests.
 
     This fixture is required by pytest-homeassistant-custom-component
     so that HA can discover integrations in the custom_components/ folder.
+    Only needed for L2/L3 integration tests, not L1 unit tests.
     """
     yield
