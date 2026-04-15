@@ -33,4 +33,4 @@ emulate_getchkey.py
 frida_capture.js
 reverse_chkey.py
 scan_bmp.py
-test_*.py
+working_dir/
