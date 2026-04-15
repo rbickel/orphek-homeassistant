@@ -3,12 +3,10 @@
 from __future__ import annotations
 
 import math
-from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from custom_components.orphek.api import OrphekState
-from custom_components.orphek.const import CHANNEL_MAX, CHANNEL_MIN, DP_CH1
+from custom_components.orphek.const import CHANNEL_MAX, CHANNEL_MIN
 from custom_components.orphek.light import (
     EFFECT_LIST,
     OrphekLight,
