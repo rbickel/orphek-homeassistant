@@ -2,11 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock
-
 import pytest
-
-from custom_components.orphek.api import OrphekState
 from custom_components.orphek.switch import (
     OrphekHourSystemSwitch,
     OrphekNoAutoSwitchSwitch,
