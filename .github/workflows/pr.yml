@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   test:
-    name: Run unit tests
+    name: Run unit tests (L1)
     runs-on: ubuntu-latest
     # Run on code changes (opened, synchronize, reopened, ready_for_review),
     # and also when the release label is applied (to confirm tests pass before publishing).
@@ -32,8 +32,39 @@ jobs:
       - name: Install dependencies
         run: pip install pytest pytest-asyncio homeassistant tinytuya pycryptodome requests
 
-      - name: Run tests
-        run: pytest --tb=short -v
+      - name: Run unit tests
+        run: >
+          pytest tests/test_api.py tests/test_atop.py tests/test_binary_sensor.py
+          tests/test_coordinator.py tests/test_device_schema.py tests/test_integration.py
+          tests/test_light.py tests/test_number.py tests/test_select.py
+          tests/test_sensor.py tests/test_switch.py
+          --tb=short -v
+
+  integration-test:
+    name: Run integration tests (L2 + L3)
+    runs-on: ubuntu-latest
+    if: github.event.action != 'labeled' || github.event.label.name == 'release'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          pip install pytest-homeassistant-custom-component tinytuya pycryptodome requests
+
+      - name: Run integration tests
+        run: >
+          pytest tests/test_config_flow.py tests/test_setup.py
+          tests/test_full_integration.py
+          --tb=short -v
 
   auto-bump-version:
     name: Auto-bump patch version if needed
@@ -120,7 +151,7 @@ jobs:
     permissions:
       contents: write
     runs-on: ubuntu-latest
-    needs: [auto-bump-version, test]
+    needs: [auto-bump-version, test, integration-test]
     # Implicitly skipped unless auto-bump-version ran (i.e. 'release' label was applied)
 
     steps:
