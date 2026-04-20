@@ -6,6 +6,7 @@
   ],
   "config_flow": true,
   "documentation": "https://github.com/rbickel/orphek-homeassistant",
+  "issue_tracker": "https://github.com/rbickel/orphek-homeassistant/issues",
   "iot_class": "local_polling",
   "requirements": [
     "tinytuya>=1.15.0",
